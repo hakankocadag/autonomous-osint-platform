@@ -1,0 +1,40 @@
+# ==========================================
+# AI-Powered Autonomous OSINT Platform
+# Master requirements.txt
+# ==========================================
+
+# ------------------------------------------
+# 1. Core Orchestration & Web Scraping (Hakan)
+# ------------------------------------------
+aiohttp==3.9.3           # For ultra-fast asynchronous static scraping
+playwright==1.42.0       # For headless, JS-rendered dynamic scraping
+beautifulsoup4==4.12.3   # For DOM parsing and initial HTML navigation
+lxml==5.1.0              # High-performance XML/HTML parser for BeautifulSoup
+
+# ------------------------------------------
+# 2. Local AI, PyTorch & Inference (Ali)
+# ------------------------------------------
+torch==2.2.1             # Core PyTorch architecture (CPU/CUDA)
+numpy==1.26.4            # Essential math and tensor operations
+
+# ------------------------------------------
+# 3. Cloud API, Validation & UI (Yiğithan)
+# ------------------------------------------
+fastapi==0.110.0         # Async REST/WebSocket API endpoints
+uvicorn[standard]==0.27.1 # ASGI server to run FastAPI
+pydantic==2.6.3          # Strict schema validation and data integrity
+streamlit==1.32.0        # Python-native dynamic UI dashboard
+httpx==0.27.0            # Asynchronous HTTP client for Cloud LLM APIs
+
+# ------------------------------------------
+# 4. NLP Pipeline & Audio Services (Kenan)
+# ------------------------------------------
+spacy==3.7.4             # Industry-standard NLP text processing
+pydub==0.25.1            # Audio post-processing (silence trimming, formatting)
+librosa==0.10.1          # Advanced audio normalization and signal processing
+edge-tts==6.1.9          # High-quality Text-to-Speech generation
+
+# ------------------------------------------
+# 5. Environment & Utilities (Global)
+# ------------------------------------------
+python-dotenv==1.0.1     # Managing API keys (DeepSeek, Gemini) safely
