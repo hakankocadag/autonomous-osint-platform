@@ -1,0 +1,50 @@
+# ==========================================
+# 1. Security & Environment Variables
+# ==========================================
+.env
+.env.local
+secrets.json
+
+# ==========================================
+# 2. Python & Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+Pipfile.lock
+
+# ==========================================
+# 3. PyTorch & AI Model Weights (Critical for Ali)
+# ==========================================
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+models/weights/
+models/checkpoints/
+
+# ==========================================
+# 4. Data Scraped by Agents (Critical for Hakan & Kenan)
+# ==========================================
+data/raw/
+data/processed/
+*.json_backup
+*.log
+
+# ==========================================
+# 5. Audio Output (Critical for Kenan)
+# ==========================================
+outputs/audio/*.mp3
+outputs/audio/*.wav
+
+# ==========================================
+# 6. IDE & OS Files
+# ==========================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
