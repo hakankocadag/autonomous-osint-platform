@@ -1,275 +1,103 @@
-# AI-Powered Autonomous OSINT Platform
+# OSINT Project 3
 
-## 1. Project Overview
+This project is an AI-powered OSINT system that collects, cleans, analyzes, and presents open-source intelligence data.
 
-The **AI-Powered Autonomous OSINT (Open Source Intelligence) Platform** is an advanced software engineering project designed to automate the extraction, processing, and analysis of intelligence from publicly available digital sources.
+## Project Overview
 
-Built using advanced Python concepts such as:
+The system processes collected OSINT data and prepares it for AI-based report generation. After the data is cleaned, the system can generate a structured intelligence report and convert the final report into an audio briefing.
 
-* Asynchronous programming (`asyncio`)
-* Object-Oriented Design
-* Custom AI architectures (PyTorch)
+## Main Features
 
-the system functions as an **autonomous intelligence analyst**.
+- Data cleaning with NLP pipeline
+- AI-powered intelligence report generation
+- Structured JSON report output
+- Text-to-Speech audio briefing
+- Edge-TTS support for natural voice output
+- gTTS fallback support
+- Environment-based configuration
 
-### Core Workflow
+## Project Flow
 
-1. **Data Collection**
+```text
+Raw Data
+→ NLP Cleaning
+→ Clean JSON
+→ AI Intelligence Report
+→ Final Briefing JSON
+→ TTS Audio Briefing
+→ briefing.mp3
+```
 
-   * Concurrent web-scraping agents gather raw data based on user queries (e.g., geopolitical events, market trends).
+## Main Files
 
-2. **NLP Processing Pipeline**
+```text
+nlp.py               # Cleans and prepares raw text data
+report_service.py    # Generates AI-powered intelligence report
+tts_service.py       # Converts final report into audio briefing
+test_swarm.py        # Main pipeline / test runner
+requirements.txt     # Required Python packages
+.env.example         # Example environment configuration
+```
 
-   * Cleans and filters noisy data
-   * Extracts meaningful signals
+## Environment Setup
 
-3. **AI Processing**
+Create a `.env` file based on `.env.example`.
 
-   * Routes processed data to:
+Example:
 
-     * A locally fine-tuned PyTorch model, OR
-     * Cloud AI APIs
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_key_here
+GEMINI_MODEL=gemini-flash-latest
 
-4. **Output Delivery**
+ENABLE_PROVIDER_FALLBACK=false
+FALLBACK_PROVIDERS=openai,claude
 
-   * Generates structured intelligence reports
-   * Streams results via UI
-   * Converts reports into high-quality audio briefings
+ENABLE_TTS=true
+TTS_PROVIDER=edge
+TTS_OUTPUT_FILE=briefing.mp3
+TTS_VOICE=en-US-GuyNeural
+TTS_RATE=-5%
+TTS_PITCH=-2Hz
+TTS_VOLUME=+0%
+```
 
----
+## Installation
 
-## 2. Team Architecture & Technical Specifications
+Install the required packages:
 
-### Hakan Kocadağ — Autonomous Agent Swarm & Core Orchestration
+```bash
+pip install -r requirements.txt
+```
 
-#### Asynchronous Agent Swarm
+## Usage
 
-* Built using `asyncio`
-* Dual-engine scraping:
+Run the main pipeline:
 
-  * `aiohttp` → fast static scraping
-  * `Playwright` → dynamic JS-heavy sites
-* Features:
+```bash
+python test_swarm.py
+```
 
-  * Connection pooling
-  * Exponential backoff
-  * Proxy rotation
+Or test the TTS service separately:
 
-#### Strategy-Based Routing
+```bash
+python tts_service.py
+```
 
-* Uses **Strategy Design Pattern**
-* Dynamically routes processed data to:
+## Audio Briefing
 
-  * Local AI model OR
-  * Cloud APIs
-* Ensures modular and scalable architecture
+The TTS module reads the final intelligence report JSON and converts it into an MP3 audio briefing.
 
-#### Fault-Tolerant Data Flow
+The default output file is:
 
-* Producer-consumer model using `asyncio.Queue`
-* Scrapers = producers
-* NLP pipeline = consumers
-* Fully non-blocking system
+```text
+briefing.mp3
+```
 
----
+The project uses `edge-tts` for a more natural neural voice. If needed, `gTTS` can be used as a fallback.
 
-### Ali Mojarrad Almanabad — Local AI Engineering
+## Security Note
 
-#### Custom Model Architecture
+The `.env` file is not included in this repository because it may contain private API keys.
 
-* Implements LLM (QWEN / LLaMA) in pure PyTorch
-* Loads pretrained weights
-* Includes custom tokenizer
-
-#### Fine-Tuning (PEFT / LoRA)
-
-* Applies Parameter-Efficient Fine-Tuning
-* Optimized for OSINT report generation
-
-#### High-Performance Inference
-
-* Techniques used:
-
-  * Quantization
-  * FlashAttention
-  * KV caching
-
-#### Integration
-
-* Receives processed data from router
-* Outputs structured JSON / Markdown reports
-
----
-
-### Yiğithan Karabel — UI & Cloud Integration
-
-#### Async API Layer
-
-* Built with FastAPI
-* Handles:
-
-  * User queries
-  * Data routing
-* Fully asynchronous
-
-#### User Interface
-
-* Built using Streamlit / PyQt / Flask
-* Features:
-
-  * Query input system
-  * Real-time streaming output
-
-#### Validation
-
-* Uses Pydantic for:
-
-  * Request validation
-  * Response validation
-* Ensures data integrity
-
----
-
-### Kenan Akyürek — NLP Pipeline & Audio Processing
-
-#### NLP Pipeline
-
-* Follows SOLID principles
-* Uses Chain of Responsibility pattern
-* Tasks:
-
-  * HTML cleaning
-  * Noise reduction
-  * Text normalization
-
-Libraries:
-
-* spaCy
-* BeautifulSoup
-
-#### Async Queue Processing
-
-* Uses `asyncio.Queue`
-* Real-time data consumption
-* Integrated schema validation (Pydantic)
-
-#### Audio Processing (TTS)
-
-* Tools:
-
-  * edge-tts
-  * pydub
-  * librosa
-* Features:
-
-  * Silence trimming
-  * Audio normalization
-  * Dynamic range compression
-
-Goal: Professional-grade audio briefings
-
----
-
-## 3. Standard Operating Procedures (SOPs)
-
-### 3.1 Project Management (Trello Kanban)
-
-* **Card Naming Format**
-
-  ```
-  [Name: DD.MM.YYYY] Task Description
-  ```
-
-* **WIP Limit**
-
-  * Max 2 tasks "In Progress" per person
-
-* **AI Prompt Log**
-
-  * Store useful prompts
-  * One prompt per card
-
----
-
-### 3.2 Version Control (Git Flow)
-
-#### Rules
-
-* No direct commits to `main`
-* `main` must always be stable
-
-#### Branching
-
-* Feature:
-
-  ```
-  feature/description-name
-  ```
-* Bugfix:
-
-  ```
-  fix/description-name
-  ```
-
-#### Pull Requests
-
-* Required for merging into `dev`
-* Must be reviewed by at least one teammate
-
-#### Dependencies
-
-* Maintain a single `requirements.txt`
-* All dependencies must be listed
-
----
-
-### 3.3 AI-Assisted Development Guidelines
-
-#### 1. Provide Context
-
-* Always include relevant architecture details in prompts
-
-#### 2. Generate Small Components
-
-* Prefer:
-
-  * Single class
-  * Single function
-* Avoid large auto-generated files
-
-#### 3. Enforce Code Quality
-
-* Always request:
-
-  * Type hints
-  * Google-style docstrings
-
-#### 4. Review Everything
-
-* Never blindly trust AI-generated code
-* Carefully inspect:
-
-  * Async logic
-  * PyTorch operations
-  * External APIs
-
----
-
-## Summary
-
-This system combines:
-
-* Distributed asynchronous scraping
-* Modular NLP processing
-* Advanced AI inference (local + cloud)
-* Real-time UI delivery
-* High-quality audio synthesis
-
-It is designed to be:
-
-* Scalable
-* Fault-tolerant
-* Modular
-* Production-ready
-
----
+Use `.env.example` as a template and create your own `.env` file locally.
