@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+
+<head>
+    <meta charset="utf-8">
+    <title>OSINT Map</title>
+
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <link rel="stylesheet" href="leaflet.css" />
+    <script src="leaflet.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            background-color: #dddddd;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        console.log("Checkpoint 1: Script started");
+
+        // Initialize the Map
+        var map = L.map('map').setView([38.7205, 35.4826], 13);
+        console.log("Checkpoint 2: Map object created");
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        console.log("Checkpoint 3: Tile layer added");
+
+        var backend = null;
+
+        // 2. Setup the WebChannel connection to Python
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            backend = channel.objects.backend;
+        });
+
+        // 3. JS to Python: Send coordinates when the map is clicked
+        map.on('click', function (e) {
+            if (backend) {
+                // Call the Python method 'receive_coordinates'
+                backend.receive_coordinates(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
+        // 4. Python to JS: A function Python can call to drop markers
+        function addMarker(lat, lng, popupText) {
+            L.marker([lat, lng]).addTo(map)
+                .bindPopup(popupText)
+                .openPopup();
+
+            // Pan the map to the new marker
+            map.panTo(new L.LatLng(lat, lng));
+        }
+    </script>
+</body>
+
+</html>
