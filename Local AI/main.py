@@ -76,10 +76,6 @@ class Spinner:
 
 
 def load_model_silently():
-    """
-    Import and initialize the model without printing anything to the terminal.
-    All stdout/stderr from model loading is captured and discarded.
-    """
     import io
     import contextlib
 
@@ -151,10 +147,6 @@ def load_model_silently():
 
 
 def run_inference_silent(model, tokenizer, device, torch, prompt_text: str) -> str:
-    """
-    Run the model on prompt_text, capture all token output silently,
-    and return the raw string. Nothing is printed to the terminal.
-    """
     import io, contextlib
 
     PLANNER_SYSTEM_PROMPT = f"""
@@ -330,7 +322,7 @@ def run_dig(domain):
             continue
         print(f"{col}{B}{entries[0]}{R}")
         all_lines.append(kv_str(f"{rec} Records", entries[0]))
-        for e in entries[1:6]:  # cap at 6 per type
+        for e in entries[1:6]:
             print(f"  {GRAY}  {'':20}   {col}{e}{R}")
             all_lines.append(f"  {'':22}  {e}")
     return "\n".join(all_lines) if all_lines else f"{DIM}  (no results){R}"
@@ -374,7 +366,6 @@ def run_whatweb(t):
         if server != "N/A":
             print(f"  {GRAY}·{R} {DIM}{'Server':<20}{R}  {ROSE}{server}{R}")
 
-        # Extract interesting plugin names from Summary
         if summary_m:
             plugins = [p.strip() for p in summary_m.group(1).split(",")]
             notable = [p for p in plugins if any(k in p.lower() for k in
@@ -585,7 +576,6 @@ def run_recon(plan: dict):
     print(f"{PURP}{B}║{R}  {DIM}Started {R}  {GRAY}{started.strftime('%Y-%m-%d  %H:%M:%S UTC'):<{W-12}}{R}{PURP}{B}║{R}")
     print(f"{PURP}{B}╚{'═'*(W-2)}╝{R}")
 
-    # ── Run tools ─────────────────────────────────────────────────────────────
     tool_results: dict = {}
 
     for tool in tools:
@@ -604,10 +594,9 @@ def run_recon(plan: dict):
         try:
             output = runner(plan)
             spinner.stop(f"  {tool} complete", success=True)
-            # Print structured output to terminal
             if isinstance(output, dict):
                 for k, v in output.items():
-                    if k == "raw":          # skip verbose raw blobs
+                    if k == "raw":
                         continue
                     val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
                     print(f"  {DIM}{k:<20}{R}  {SILVR}{val[:80]}{R}")
@@ -623,7 +612,6 @@ def run_recon(plan: dict):
 
         print(f"{BLOOD}{DIM}└{'─'*(W-2)}┘{R}")
 
-    # ── Build JSON report ─────────────────────────────────────────────────────
     finished = datetime.now(timezone.utc)
     report = {
         "meta": {
