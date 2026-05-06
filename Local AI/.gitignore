@@ -1,0 +1,5 @@
+// models weights are ignored
+*.safetensors
+// model's tokenizer's vocablary
+*.json
+__pycache__
