@@ -3,3 +3,4 @@
 // model's tokenizer's vocablary
 *.json
 __pycache__
+stuff.py

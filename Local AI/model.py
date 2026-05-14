@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, List
 import math
 
@@ -24,6 +24,13 @@ class Args:
   sliding_window : int = 10240
   kv_quant_bits: int = 4
   kv_quant_mode: str = "prod"
+  """
+  Added the new and different attention masks
+  users can change the mask into "casual", "sliding_window", "streaming_llm"
+  """
+  attn_mask_type: str = "streaming_llm"
+  n_sink_tokens: int = 4
+
 def _gaussian_lloyd_max_centroids(n_levels: int) -> torch.Tensor:
     import torch
     c = torch.linspace(-3.0, 3.0, n_levels)
@@ -104,11 +111,11 @@ class TurboQuantProd(nn.Module):
         orig_dtype = x.dtype
         x = x.to(self.dtype)
 
-        idx     = self.mse_quant.quant(x)
-        x_mse   = self.mse_quant.dequant(idx)
+        idx = self.mse_quant.quant(x)
+        x_mse = self.mse_quant.dequant(idx)
 
-        r       = x - x_mse
-        gamma   = r.norm(dim=-1, keepdim=True)
+        r = x - x_mse
+        gamma = r.norm(dim=-1, keepdim=True)
 
         Sr  = r @ self.S.T
         qjl = Sr.sign().to(torch.int8)
@@ -146,34 +153,27 @@ class TurboQuantKVCache:
     ):
         self.batch_size  = batch_size
         self.max_seq_len = max_seq_len
-        self.n_kv_heads  = n_kv_heads
-        self.head_dim    = head_dim
-        self.bits        = bits
-        self.mode        = mode
-        self.cache_len   = 0
-
+        self.n_kv_heads = n_kv_heads
+        self.head_dim = head_dim
+        self.bits = bits
+        self.mode = mode
+        self.cache_len = 0
         quant_cls = TurboQuantMSE if mode == "mse" else TurboQuantProd
         self.k_quantizer = quant_cls(head_dim, bits, dtype=torch.float32).to(device)
         self.v_quantizer = quant_cls(head_dim, bits, dtype=torch.float32).to(device)
-
         shape = (batch_size, n_kv_heads, max_seq_len, head_dim)
-
         self.k_idx = torch.zeros(*shape, dtype=torch.int32, device=device)
         self.v_idx = torch.zeros(*shape, dtype=torch.int32, device=device)
-
         if mode == "prod":
-            self.k_qjl   = torch.zeros(*shape,     dtype=torch.int8,   device=device)
-            self.v_qjl   = torch.zeros(*shape,     dtype=torch.int8,   device=device)
+            self.k_qjl = torch.zeros(*shape, dtype=torch.int8, device=device)
+            self.v_qjl = torch.zeros(*shape, dtype=torch.int8, device=device)
             self.k_gamma = torch.zeros(*shape[:-1], 1, dtype=torch.float32, device=device)
             self.v_gamma = torch.zeros(*shape[:-1], 1, dtype=torch.float32, device=device)
-
         self._float_dtype = dtype
-
     def _quant_store(self, x: torch.Tensor, quantizer, idx_buf, pos,
                      qjl_buf=None, gamma_buf=None):
         B, H, T, D = x.shape
         xf = x.to(torch.float32)
-
         if self.mode == "mse":
             idx = quantizer.quant(xf)
             idx_buf[:, :, pos:pos+T, :] = idx
@@ -182,7 +182,6 @@ class TurboQuantKVCache:
             idx_buf  [:, :, pos:pos+T, :] = idx
             qjl_buf  [:, :, pos:pos+T, :] = qjl
             gamma_buf[:, :, pos:pos+T, :] = gamma
-
     def _dequant_read(self, quantizer, idx_buf, end,
                       qjl_buf=None, gamma_buf=None) -> torch.Tensor:
         idx = idx_buf[:, :, :end, :]
@@ -193,7 +192,6 @@ class TurboQuantKVCache:
             gamma = gamma_buf[:, :, :end, :]
             out   = quantizer.dequant(idx, qjl, gamma)
         return out.to(self._float_dtype)
-
     def update(self, keys: torch.Tensor, values: torch.Tensor
                ) -> Tuple[torch.Tensor, torch.Tensor]:
         T = keys.shape[2]
@@ -205,9 +203,7 @@ class TurboQuantKVCache:
                               self.k_qjl, self.k_gamma)
             self._quant_store(values, self.v_quantizer, self.v_idx, self.cache_len,
                               self.v_qjl, self.v_gamma)
-
         self.cache_len += T
-
         k_out = self._dequant_read(self.k_quantizer, self.k_idx, self.cache_len,
                                    getattr(self, "k_qjl",   None),
                                    getattr(self, "k_gamma",  None))
@@ -215,7 +211,6 @@ class TurboQuantKVCache:
                                    getattr(self, "v_qjl",   None),
                                    getattr(self, "v_gamma",  None))
         return k_out, v_out
-
     def reset(self):
         self.cache_len = 0
         self.k_idx.zero_()
@@ -226,17 +221,13 @@ class TurboQuantKVCache:
             self.k_gamma.zero_()
             self.v_gamma.zero_()
 
-
 class KVCache:
     def __init__(self, batch_size: int, max_seq_len: int,
                  n_kv_heads: int, head_dim: int,
                  dtype: torch.dtype, device: torch.device):
-        self.k_cache = torch.zeros(batch_size, n_kv_heads, max_seq_len, head_dim,
-                                   dtype=dtype, device=device)
-        self.v_cache = torch.zeros(batch_size, n_kv_heads, max_seq_len, head_dim,
-                                   dtype=dtype, device=device)
+        self.k_cache = torch.zeros(batch_size, n_kv_heads, max_seq_len, head_dim, dtype=dtype, device=device)
+        self.v_cache = torch.zeros(batch_size, n_kv_heads, max_seq_len, head_dim, dtype=dtype, device=device)
         self.cache_len = 0
-
     def update(self, keys: torch.Tensor, values: torch.Tensor
                ) -> Tuple[torch.Tensor, torch.Tensor]:
         seq_len = keys.shape[2]
@@ -283,7 +274,6 @@ class RMSNorm(nn.Module):
             norm_x = norm_x + self.shift
         return norm_x.to(input_dtype)
 
-
 def compute_rope_params(head_dim, theta_base=10_000, context_length=4096, dtype=torch.float32):
     assert head_dim % 2 == 0, "Embedding dimension must be even"
     inv_freq = 1.0 / (theta_base ** (torch.arange(0, head_dim, 2, dtype=dtype)[: (head_dim // 2)].float() / head_dim))
@@ -293,7 +283,6 @@ def compute_rope_params(head_dim, theta_base=10_000, context_length=4096, dtype=
     cos = torch.cos(angles)
     sin = torch.sin(angles)
     return cos, sin
-
 
 def apply_rope(x, cos, sin, start_pos: int = 0):
     batch_size, num_heads, seq_len, head_dim = x.shape
@@ -322,10 +311,10 @@ class GroupedQueryAttention(nn.Module):
        head_dim = emb_dim // num_heads
      self.head_dim = head_dim
      self.d_out = self.num_heads * self.head_dim
-     self.q_proj   = nn.Linear(emb_dim, self.d_out,              bias=False, dtype=dtype)
-     self.k_proj   = nn.Linear(emb_dim, num_kv_groups * head_dim, bias=False, dtype=dtype)
-     self.v_proj   = nn.Linear(emb_dim, num_kv_groups * head_dim, bias=False, dtype=dtype)
-     self.out_proj = nn.Linear(self.d_out, emb_dim,              bias=False, dtype=dtype)
+     self.q_proj = nn.Linear(emb_dim, self.d_out, bias=False, dtype=dtype)
+     self.k_proj = nn.Linear(emb_dim, num_kv_groups * head_dim, bias=False, dtype=dtype)
+     self.v_proj = nn.Linear(emb_dim, num_kv_groups * head_dim, bias=False, dtype=dtype)
+     self.out_proj = nn.Linear(self.d_out, emb_dim, bias=False, dtype=dtype)
      if qk_norm:
       self.q_norm = RMSNorm(head_dim, eps=1e-6)
       self.k_norm = RMSNorm(head_dim, eps=1e-6)
@@ -342,15 +331,12 @@ class GroupedQueryAttention(nn.Module):
       kv_cache=None,
   ) -> torch.Tensor:
     B, T, C = x.shape
-
     queries = self.q_proj(x)
     keys    = self.k_proj(x)
     values  = self.v_proj(x)
-
     queries = queries.view(B, T, self.num_heads,    self.head_dim).transpose(1, 2)
     keys    = keys.view   (B, T, self.num_kv_groups, self.head_dim).transpose(1, 2)
     values  = values.view (B, T, self.num_kv_groups, self.head_dim).transpose(1, 2)
-
     if self.q_norm:
         queries = self.q_norm(queries)
     if self.k_norm:
@@ -367,14 +353,22 @@ class GroupedQueryAttention(nn.Module):
     keys   = keys.repeat_interleave(self.group_size, dim=1)
     values = values.repeat_interleave(self.group_size, dim=1)
 
-    is_causal = (kv_cache is None) or (T > 1)
+    if mask is not None:
+        context_vector = F.scaled_dot_product_attention(
+            queries, keys, values,
+            attn_mask=~mask,
+            dropout_p=0.0,
+            is_causal=False,
+        )
+    else:
+        is_causal = (kv_cache is None) or (T > 1)
+        context_vector = F.scaled_dot_product_attention(
+            queries, keys, values,
+            attn_mask=None,
+            dropout_p=0.0,
+            is_causal=is_causal,
+        )
 
-    context_vector = F.scaled_dot_product_attention(
-        queries, keys, values,
-        attn_mask=None,
-        dropout_p=0.0,
-        is_causal=is_causal,
-    )
     context_vector = context_vector.transpose(1, 2).contiguous().view(B, T, self.d_out)
     return self.out_proj(context_vector)
 
@@ -433,6 +427,7 @@ class Qwen3Model(nn.Module):
 
         self.kv_caches: Optional[List] = None
         self.apply(self._init_weights)
+
     def setup_kv_cache(
         self,
         batch_size: int,
@@ -481,7 +476,7 @@ class Qwen3Model(nn.Module):
     ) -> torch.Tensor:
         x = self.tok_emb(in_idx)
         T = x.shape[1]
-        mask = self._mask_create(T, x.device, "casual") if T > 1 else None
+        mask = self._mask_create(T, x.device, self.args.attn_mask_type) if T > 1 else None
         for i, block in enumerate(self.trf_blocks):
             kv_cache = self.kv_caches[i] if self.kv_caches is not None else None
             x = block(x, mask, self.sin, self.cos, start_pos=start_pos, kv_cache=kv_cache)
@@ -560,5 +555,20 @@ class Qwen3Model(nn.Module):
             window = self.args.sliding_window
             ones   = torch.ones(seq_len, seq_len, dtype=torch.bool, device=device)
             return ~torch.triu(torch.tril(ones, diagonal=0), diagonal=-window)
+
+        elif name == "streaming_llm":
+            n_sink = self.args.n_sink_tokens
+            window = self.args.sliding_window
+            rows = torch.arange(seq_len, device=device).unsqueeze(1)
+            cols = torch.arange(seq_len, device=device).unsqueeze(0)
+            causal = cols <= rows
+            in_sink = cols < n_sink
+            in_window = (cols >= (rows - window + 1)) & causal
+            attend = (in_sink | in_window) & causal
+            print(~attend)
+            return ~attend
         else:
-            return torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=device), diagonal=1)
+            return torch.triu(
+                torch.ones(seq_len, seq_len, dtype=torch.bool, device=device),
+                diagonal=1,
+            )
