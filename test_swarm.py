@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import sys
+import argparse
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -294,23 +295,38 @@ async def main() -> None:
     # 1. Fire up the backend NLP loop (daemonized equivalent)
     consumer_task = asyncio.create_task(nlp_consumer.start(nlp_inbox, nlp_outbox))
 
-    keyword = input("Enter topic: ").strip() or "AI"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keyword", default="")
+    parser.add_argument("--hours", type=float, default=0.0)
+    parser.add_argument("--choice", default="")
+    args, _ = parser.parse_known_args()
+
+    if args.keyword:
+        keyword = args.keyword
+    else:
+        keyword = input("Enter topic: ").strip() or "AI"
     
-    hours_input = input("Enter last how many hours: ").strip()
-    try:
-        hours = float(hours_input)
-    except ValueError:
-        hours = 24.0
+    if args.hours > 0:
+        hours = args.hours
+    else:
+        hours_input = input("Enter last how many hours: ").strip()
+        try:
+            hours = float(hours_input)
+        except ValueError:
+            hours = 24.0
 
-    print("\nAvailable sources:")
-    for i, s in enumerate(SOURCES, start=1):
-        print(f"{i}. {s['name']}")
-    print(f"{len(SOURCES) + 1}. Gather All")
+    if args.choice:
+        choice = args.choice
+    else:
+        print("\nAvailable sources:")
+        for i, s in enumerate(SOURCES, start=1):
+            print(f"{i}. {s['name']}")
+        print(f"{len(SOURCES) + 1}. Gather All")
 
-    choice = input("Choose sources: ").strip()
+        choice = input("Choose sources: ").strip()
     
     selected_sources = []
-    if choice == str(len(SOURCES) + 1) or not choice:
+    if choice == str(len(SOURCES) + 1) or choice.lower() == "all" or not choice:
         selected_sources = SOURCES
     else:
         for part in choice.split(","):
