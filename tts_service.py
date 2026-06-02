@@ -8,7 +8,12 @@ logger = logging.getLogger(__name__)
 
 def build_spoken_briefing(report: dict) -> str:
     category = report.get("category", "Unknown Category")
-    location = report.get("location", "Unknown Location")
+    locations_list = report.get("locations", [])
+    if locations_list:
+        loc_names = [loc.get("location", "Unknown") for loc in locations_list if loc.get("location")]
+        location = ", ".join(loc_names) if loc_names else "Multiple Locations"
+    else:
+        location = report.get("location", "Unknown Location")
     confidence_level = report.get("confidence_level", "Unknown")
     
     key_judgments = report.get("key_judgments", [])
@@ -37,8 +42,8 @@ def build_spoken_briefing(report: dict) -> str:
         judgments_text = "No specific judgments were made."
         
     script = (
-        f"Sir, briefing mode is active.\n\n"
-        f"This report focuses on {category}, with relevance to {location}. Confidence level is {confidence_level}.\n\n"
+        # f"This report focuses on {category}, with relevance to {location}. Confidence level is {confidence_level}.\n\n"
+        f"This report focuses on {category}, with relevance to {location}.\n\n"
         f"Key judgments are as follows. {judgments_text}\n\n"
         f"{summary}\n\n"
         f"End of briefing."
@@ -49,13 +54,15 @@ def build_spoken_briefing(report: dict) -> str:
     script = re.sub(r'\bAI\b', 'artificial intelligence', script)
     # Remove URLs
     script = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', script)
+    # Remove Markdown headers and bold/italic formatting
+    script = re.sub(r'[#*]', '', script)
     
     # Condense multiple spaces (leaving newlines intact)
     script = re.sub(r' +', ' ', script).strip()
     
     return script
 
-def generate_audio_briefing(report_json_path: str, output_file: str = "briefing.mp3") -> None:
+def generate_audio_briefing(report_json_path: str, output_file: str = None) -> None:
     """
     Reads the finalized AI intelligence report JSON and converts it into a natural spoken briefing.
     Does not crash the pipeline if TTS fails.
@@ -86,7 +93,8 @@ def generate_audio_briefing(report_json_path: str, output_file: str = "briefing.
 
         # 4. Call TTS Provider
         provider = os.environ.get("TTS_PROVIDER", "gtts").strip().lower()
-        output_file = os.environ.get("TTS_OUTPUT_FILE", output_file).strip()
+        if output_file is None:
+            output_file = os.environ.get("TTS_OUTPUT_FILE", "briefing.mp3").strip()
 
         logger.info(f"Attempting to generate audio using TTS provider: {provider}")
 

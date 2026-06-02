@@ -15,8 +15,14 @@ CRITICAL INSTRUCTIONS FOR THE JSON OUTPUT:
 {
   "sources": [],
   "category": "",
-  "location": "",
+  "locations": [
+    {
+      "location": "",
+      "news_titles": []
+    }
+  ],
   "keywords": [],
+  "topics": [],
   "confidence_level": "",
   "key_judgments": [],
   "summary": ""
@@ -25,17 +31,17 @@ CRITICAL INSTRUCTIONS FOR THE JSON OUTPUT:
 FIELD RULES:
 - "sources": Unique names of reporting entities. No URLs.
 - "category": Main domain of the data.
-- "location": Main geographic scope (e.g., "United States, Europe").
+- "locations": Array of objects mapping locations (geographic scope like "United States", "Europe", "Paris") to an array of news titles relevant to that location. If vague, leave empty.
 - "keywords": Array of 5-10 concise keywords summarizing the whole dataset. Avoid generic words like "news", "report", "article".
+- "topics": Array of topic headers that correspond to the sections discussed in the summary.
 - "confidence_level": Allowed values are "Low", "Medium", or "High" based on clarity.
 - "key_judgments": 2-4 short analytical bullet-style judgments grounded in the input. Do not make dramatic unsupported claims.
 
 SUMMARY RULES:
-1. Must start exactly with "Sir, " (use "Sir, major...", not "Sir, Major...").
-2. Keep it exactly one paragraph, around 60-90 words.
-3. It must sound like a direct human intelligence briefing to a decision-maker.
-4. Synthesize the whole dataset; do not summarize each record separately.
-5. Avoid robotic/academic phrases such as: "ignite global debate", "regulatory frameworks", "profound economic impacts", "critical juncture", "mandates close observation", "ramifications", "global landscape", "broader implications".
+1. Provide a summary for each topic, structured with headers for each topic (Markdown headers like ### are allowed). Do not provide a single whole summarization.
+2. For each topic, keep it exactly one paragraph, around 60-90 words.
+3. Synthesize the whole dataset; do not summarize each record separately.
+4. Avoid robotic/academic phrases such as: "ignite global debate", "regulatory frameworks", "profound economic impacts", "critical juncture", "mandates close observation", "ramifications", "global landscape", "broader implications".
 """
 
 import time
@@ -118,8 +124,9 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
     default_response = {
         "sources": [],
         "category": "Unknown",
-        "location": "Unknown",
+        "locations": [],
         "keywords": [],
+        "topics": [],
         "confidence_level": "Low",
         "key_judgments": [],
         "summary": "AI report generation failed because the selected provider was temporarily unavailable."
@@ -141,8 +148,9 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
         validated = {
             "sources": parsed.get("sources", []),
             "category": parsed.get("category", "Mixed") or "Mixed",
-            "location": parsed.get("location", "Unknown") or "Unknown",
+            "locations": parsed.get("locations", []),
             "keywords": parsed.get("keywords", []),
+            "topics": parsed.get("topics", []),
             "confidence_level": parsed.get("confidence_level", "Low") or "Low",
             "key_judgments": parsed.get("key_judgments", []),
             "summary": parsed.get("summary", "")
@@ -151,10 +159,18 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
         if not isinstance(validated["sources"], list):
             validated["sources"] = []
             
+        if not isinstance(validated["locations"], list):
+            validated["locations"] = []
+            
         if isinstance(validated["keywords"], str):
             validated["keywords"] = [k.strip() for k in validated["keywords"].split(",") if k.strip()]
         elif not isinstance(validated["keywords"], list):
             validated["keywords"] = []
+            
+        if isinstance(validated["topics"], str):
+            validated["topics"] = [k.strip() for k in validated["topics"].split(",") if k.strip()]
+        elif not isinstance(validated["topics"], list):
+            validated["topics"] = []
             
         if isinstance(validated["key_judgments"], str):
             validated["key_judgments"] = [k.strip() for k in validated["key_judgments"].split("\n") if k.strip()]
