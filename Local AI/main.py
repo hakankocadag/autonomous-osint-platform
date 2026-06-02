@@ -97,8 +97,8 @@ def load_model_silently():
         dtype  = torch.bfloat16
 
         tokenizer = Qwen3Tokenizer(
-            tokenizer_file_path="tokenizer.json",
-            repo_id="drive/MyDrive/Qwen3-0.6B",
+            tokenizer_file_path="./Qwen3-1.7B/tokenizer.json",
+            repo_id="./Qwen3-1.7B",
             apply_chat_template=True,
             add_generation_prompt=True,
             add_thinking=False
@@ -109,8 +109,8 @@ def load_model_silently():
             model = Qwen3Model(args)
 
         files = [
-            "model-00001-of-00002.safetensors",
-            "model-00002-of-00002.safetensors"
+            "./Qwen3-1.7B/model-00001-of-00002.safetensors",
+            "./Qwen3-1.7B/model-00002-of-00002.safetensors"
         ]
 
         for f in files:
@@ -140,6 +140,7 @@ def load_model_silently():
                     pass
             del state_dict
 
+        model.to(device) # <-- This code added
         model.eval()
 
     spinner.stop("Model ready", success=True)
@@ -626,7 +627,8 @@ def run_recon(plan: dict):
     }
 
     safe_name   = re.sub(r'[^\w\-.]', '_', target_display)
-    report_file = f"report_{safe_name}.json"
+    os.makedirs("reports", exist_ok=True)
+    report_file = os.path.join("reports", f"report_{safe_name}.json")
     with open(report_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
 

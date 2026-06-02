@@ -446,8 +446,8 @@ def main():
     report = sanitise(report)
 
     safe_name   = re.sub(r'[^\w\-.]', '_', target)
-    report_file = f"report_{safe_name}.json"
-
+    report_file = f"reports/report_{safe_name}.json"
+    
     with open(report_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
 
