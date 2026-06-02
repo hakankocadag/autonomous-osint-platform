@@ -31,6 +31,14 @@
 
     <script>
         console.log("Checkpoint 1: Script started");
+        
+        // Fix for missing local marker images by falling back to CDN
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        });
 
         // Initialize the Map
         var map = L.map('map').setView([38.7205, 35.4826], 13);
@@ -57,14 +65,25 @@
             }
         });
 
+        var markers = [];
+
         // 4. Python to JS: A function Python can call to drop markers
         function addMarker(lat, lng, popupText) {
-            L.marker([lat, lng]).addTo(map)
+            var marker = L.marker([lat, lng]).addTo(map)
                 .bindPopup(popupText)
                 .openPopup();
+            
+            markers.push(marker);
 
             // Pan the map to the new marker
             map.panTo(new L.LatLng(lat, lng));
+        }
+
+        function clearMarkers() {
+            for(var i = 0; i < markers.length; i++) {
+                map.removeLayer(markers[i]);
+            }
+            markers = [];
         }
     </script>
 </body>
