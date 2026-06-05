@@ -124,7 +124,7 @@ class SummaryWorker(QThread):
         try:
             import sys
             import os
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             ai_tts_dir = os.path.join(base_dir, "ai-tts")
             if ai_tts_dir not in sys.path:
                 sys.path.append(ai_tts_dir)
@@ -151,7 +151,7 @@ class TTSWorker(QThread):
             import sys
             import os
             import json
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             ai_tts_dir = os.path.join(base_dir, "ai-tts")
             if ai_tts_dir not in sys.path:
                 sys.path.append(ai_tts_dir)
@@ -160,7 +160,7 @@ class TTSWorker(QThread):
             
             os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
             
-            temp_json = os.path.join(base_dir, "client", "temp_tts_report.json")
+            temp_json = os.path.join(base_dir, "temp_tts_report.json")
             with open(temp_json, "w", encoding="utf-8") as f:
                 json.dump(self.data, f)
                 
@@ -437,7 +437,7 @@ class NewsCollectorApp(QMainWindow):
         try:
             plan = json.loads(clean)
             
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             local_ai_dir = os.path.join(base_dir, "local-ai")
             recon_file = os.path.join(local_ai_dir, "recon_output.json")
             
@@ -477,8 +477,8 @@ class NewsCollectorApp(QMainWindow):
         target_type = meta.get("target_type", "Unknown")
         
         html = f"""
-        <div style="background-color: #1e1e1e; padding: 15px; font-family: monospace; color: #d4d4d4; margin-top: 10px; margin-bottom: 10px;">
-            <h2 style="color: #c586c0; margin-top: 0; margin-bottom: 10px;">RECON REPORT: {target} ({target_type.upper()})</h2>
+        <div style="padding: 15px; color: #d4d4d4; margin-top: 10px; margin-bottom: 10px;">
+            <h2 style="margin-top: 0; margin-bottom: 10px;">RECON REPORT: {target} ({target_type.upper()})</h2>
             <hr style="border: 1px solid #444; margin-bottom: 15px;">
         """
         
@@ -648,7 +648,7 @@ class NewsCollectorApp(QMainWindow):
             scrollbar = self.ai_output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
             
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             nlp_dir = os.path.join(base_dir, "nlp")
             
             self.news_worker = NewsWorker(nlp_dir, keyword, hours)
@@ -704,7 +704,7 @@ class NewsCollectorApp(QMainWindow):
 
     def on_summary_finished(self, summary_data):
         self.ai_output.append("<font color='green'><b>System:</b> Summary generation complete.</font><br>")
-        print(summary_data)
+        # print(summary_data)
         summary_text = summary_data.get("summary", "No summary available.")
         
         locations = summary_data.get("locations", [])
@@ -735,10 +735,10 @@ class NewsCollectorApp(QMainWindow):
             sources_html = f"<div style='margin-top: 20px; color: #858585; font-size: 0.9em; font-style: italic; border-top: 1px dashed #555; padding-top: 10px;'><b>Sources:</b> {sources_list}</div>"
 
         html = f"""
-        <div style="padding: 15px; color: #d4d4d4; margin-top: 10px; margin-bottom: 10px;">
-            <h2 style="color: #c586c0; margin-top: 0; margin-bottom: 10px;">AI NEWS SUMMARY</h2>
+        <div style="padding: 15px; margin-top: 10px; margin-bottom: 10px;">
+            <h2 style="margin-top: 0; margin-bottom: 10px;">AI NEWS SUMMARY</h2>
             <hr style="border: 1px solid #444; margin-bottom: 15px;">
-            <div style='color: #ce9178;'>{html_summary}</div>
+            {html_summary}
             {sources_html}
         </div><br>
         &nbsp;<a href='tts:{msg_id}' style='text-decoration:none;'>[▶ Read]</a><br><br>

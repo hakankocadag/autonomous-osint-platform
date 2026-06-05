@@ -26,7 +26,7 @@ class QwenAgentThread(QThread):
             import io
             import contextlib
             
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             local_ai_dir = os.path.join(base_dir, "local-ai")
             local_model_dir = os.path.join(local_ai_dir, "Qwen3-1.7B")
             if local_ai_dir not in sys.path:
