@@ -171,7 +171,7 @@ Available tools:
 Rules:
 - For an IP:     use [nmap, whois, traceroute, abuseipdb, shodan, ipinfo]
 - For a domain:  use [whois, dig, whatweb, virustotal, urlscan, ipinfo]
-- For a URL:     use [whatweb, curl_headers, virustotal, urlscan]
+- For a URL:     use [whatweb, curl_headers]
 - For a hash:    use [virustotal, abuseipdb]
 - Extraction Strictness: Do NOT infer, guess, or append protocols (like http/https) unless they are explicitly written in the input text. If a target is just a domain, the url field MUST be null.
 - Output ONLY the JSON. Nothing else.

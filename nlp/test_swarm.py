@@ -52,23 +52,6 @@ SOURCES: list[dict] = [
     {"name": "BBC World",               "url": "https://www.bbc.com/news/world",                             "category": "Mainstream"},
     {"name": "Al Jazeera",              "url": "https://www.aljazeera.com/news/",                            "category": "Mainstream"},
     {"name": "The Guardian",            "url": "https://www.theguardian.com/world",                          "category": "Mainstream"},
-
-
-    {"name": "Bellingcat",              "url": "https://www.bellingcat.com/category/news/",                  "category": "Geopolitics"},
-    {"name": "ISW (War Study)",         "url": "https://www.understandingwar.org/",                          "category": "Geopolitics"},
-    {"name": "Foreign Policy",          "url": "https://foreignpolicy.com/category/latest/",                 "category": "Geopolitics"},
-    {"name": "Defense News",            "url": "https://www.defensenews.com/global/",                        "category": "Defense"},
-    
-
-    {"name": "Bloomberg Markets",       "url": "https://www.bloomberg.com/markets",                          "category": "Finance"},
-    {"name": "Financial Times",         "url": "https://www.ft.com/world",                                   "category": "Finance"},
-    {"name": "Hacker News",             "url": "https://news.ycombinator.com/newest",                        "category": "Tech"},
-    {"name": "Bleeping Computer",       "url": "https://www.bleepingcomputer.com/",                          "category": "Tech"},
-
-
-    {"name": "Reddit WorldNews",        "url": "https://www.reddit.com/r/worldnews/new/",                    "category": "Aggregator"},
-    {"name": "X / Twitter Search",      "url": "https://x.com/search?q=&src=typed_query&f=live",             "category": "Social"},
-    {"name": "Liveuamap",               "url": "https://liveuamap.com/",                                     "category": "Aggregator"}
 ]
 
 CATEGORIES: list[str] = sorted({s["category"] for s in SOURCES})
@@ -194,7 +177,7 @@ class PlaywrightExtractionStrategy(ExtractionStrategy):
                 
                 # Push heavily unstructured data directly to the NLP pipeline
                 await queue.put(payload)
-                logger.info(f"✅  Pushed (Playwright): {meta.headline[:50]}")
+                logger.info(f"✅  Pushed (Playwright): {meta.headline}")
             except Exception as e:
                 logger.error(f"❌ Playwright extraction failed on {url}: {e}")
 
@@ -244,7 +227,7 @@ class BeautifulSoupExtractionStrategy(ExtractionStrategy):
                 )
                 
                 await queue.put(payload)
-                logger.info(f"✅  Pushed (BeautifulSoup): {meta.headline[:50]}")
+                logger.info(f"✅  Pushed (BeautifulSoup): {meta.headline}")
             except Exception as e:
                 logger.error(f"❌ BeautifulSoup extraction failed on {url}: {e}")
 
@@ -351,11 +334,16 @@ async def main() -> None:
         max_request_retries=2
     )
     
+    source_map = {s["url"]: s for s in selected_sources}
+    
     async def block_visuals(context):
+        page_url = context.request.url
+        source_meta = next((meta for seed, meta in source_map.items() if seed in page_url), None)
+        if source_meta:
+            print(f"🔎 Scanning: {source_meta['name']}", flush=True)
+            
         await context.page.route("**/*", lambda r: r.abort() if r.request.resource_type in ["image", "stylesheet", "font", "media"] else r.continue_())
     discovery_crawler.pre_navigation_hook(block_visuals)
-
-    source_map = {s["url"]: s for s in selected_sources}
 
     @discovery_crawler.router.default_handler
     async def discover_handler(context):
@@ -400,6 +388,7 @@ async def main() -> None:
                     
                     if record.age_hours() <= hours:
                         discovered.append(record)
+                        print(f"📄 Found: {record.headline}", flush=True)
                 except Exception:
                     pass
         except Exception as e:

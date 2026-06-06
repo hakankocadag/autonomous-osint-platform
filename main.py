@@ -3,18 +3,22 @@ import os
 import socket
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
                              QHBoxLayout, QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, 
-                             QMessageBox, QDialog, QLabel, QLineEdit, QRadioButton, QButtonGroup)
-from PyQt6.QtGui import QAction
+                             QMessageBox, QDialog, QLabel, QLineEdit, QRadioButton, QButtonGroup,
+                             QGraphicsDropShadowEffect)
+from PyQt6.QtGui import QAction, QTextCursor, QTextBlockFormat, QTextCharFormat, QColor, QFont, QPalette, QActionGroup, QIcon
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import QUrl, QObject, pyqtSlot, Qt, pyqtSignal, QThread
+from PyQt6.QtCore import QUrl, QObject, pyqtSlot, Qt, pyqtSignal, QThread, QTimer
 
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from qwen_agent import QwenAgentThread
 import subprocess
 import json
 import re
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class ReconWorker(QThread):
     finished = pyqtSignal(str, object)
@@ -26,7 +30,7 @@ class ReconWorker(QThread):
 
     def run(self):
         try:
-            result = subprocess.run([sys.executable, "run.py"], cwd=self.local_ai_dir, capture_output=True, text=True)
+            result = subprocess.run([sys.executable, "run.py"], cwd=self.local_ai_dir, capture_output=True, text=True, encoding='utf-8', errors='replace')
             
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             clean_output = ansi_escape.sub('', result.stdout)
@@ -66,8 +70,8 @@ class NewsWorker(QThread):
     def run(self):
         try:
             process = subprocess.Popen(
-                [sys.executable, "test_swarm.py", "--keyword", str(self.keyword), "--hours", str(self.hours), "--choice", "all"],
-                cwd=self.nlp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+                [sys.executable, "-u", "test_swarm.py", "--keyword", str(self.keyword), "--hours", str(self.hours), "--choice", "all"],
+                cwd=self.nlp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding='utf-8', errors='replace'
             )
             
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -83,8 +87,21 @@ class NewsWorker(QThread):
                     match = re.search(r"Discovered (\d+) unique", clean_line)
                     if match:
                         self.progress.emit(f"Found {match.group(1)} relevant articles. Extracting content...")
+                elif "🔎 Scanning:" in clean_line:
+                    match = re.search(r"Scanning:\s*(.*)", clean_line)
+                    if match:
+                        self.progress.emit(f"Scanning source: {match.group(1)}")
+                elif "📄 Found:" in clean_line:
+                    match = re.search(r"Found:\s*(.*)", clean_line)
+                    if match:
+                        self.progress.emit(f"FOUND_ARTICLE:{match.group(1)}")
                 elif "✅  Pushed" in clean_line:
-                    self.progress.emit("Extracting article content...")
+                    match = re.search(r"Pushed \([^)]+\):\s*(.*)", clean_line)
+                    if match:
+                        title = match.group(1).strip()
+                        self.progress.emit(f"Scraping: {title}")
+                    else:
+                        self.progress.emit("Extracting article content...")
                 elif "⏳ Waiting" in clean_line:
                     self.progress.emit("Processing articles with NLP...")
                 elif "HARVEST COMPLETE" in clean_line:
@@ -230,7 +247,7 @@ class MapBridge(QObject):
 
     @pyqtSlot(float, float)
     def receive_coordinates(self, lat, lng):
-        msg = f"<font color='gray'><i>System: Map Clicked at Lat {lat:.4f}, Lng {lng:.4f}</i></font><br>"
+        msg = f"<div style='color: #555555; font-weight: bold; margin-bottom: 10px;'>System: Map Clicked at Lat {lat:.4f}, Lng {lng:.4f}</div>"
         self.app.ai_output.append(msg)
         self.app.add_marker_to_map(lat, lng, "Selected Area")
 
@@ -311,19 +328,71 @@ class TokenDialog(QDialog):
             QMessageBox.warning(self, "Error", f"Failed to save settings: {e}")
         self.accept()
 
+class ZoomableTextBrowser(QTextBrowser):
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            if event.angleDelta().y() > 0:
+                self.zoomIn(1)
+            else:
+                self.zoomOut(1)
+        else:
+            super().wheelEvent(event)
+
 class NewsCollectorApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI News OSINT Collector")
+        self.setWindowTitle("OmniSense")
         self.setGeometry(100, 100, 1200, 800)
+        
+        # Setup Window Icon
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.path.exists(os.path.join(base_dir, "icon.jpg")):
+            self.setWindowIcon(QIcon(os.path.join(base_dir, "icon.jpg")))
+        elif os.path.exists(os.path.join(base_dir, "icon.png")):
+            self.setWindowIcon(QIcon(os.path.join(base_dir, "icon.png")))
 
         # Menu Bar Setup
         menubar = self.menuBar()
+        
+        self.clock_label = QLabel(self)
+        self.clock_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.clock_label.setContentsMargins(0, 0, 15, 0)
+        self.clock_label.setMinimumWidth(150)
+        menubar.setCornerWidget(self.clock_label, Qt.Corner.TopRightCorner)
+        
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000)
+        self.update_clock()
+        
         configuration_menu = menubar.addMenu("Configuration")
         
         set_api_key_action = QAction("Set API Key", self)
         set_api_key_action.triggered.connect(self.open_token_dialog)
         configuration_menu.addAction(set_api_key_action)
+
+        theme_menu = menubar.addMenu("Theme")
+        
+        self.action_theme_system = QAction("System Default", self)
+        self.action_theme_system.setCheckable(True)
+        self.action_theme_system.triggered.connect(lambda: self.set_theme_preference("System"))
+        
+        self.action_theme_light = QAction("Light", self)
+        self.action_theme_light.setCheckable(True)
+        self.action_theme_light.triggered.connect(lambda: self.set_theme_preference("Light"))
+        
+        self.action_theme_dark = QAction("Dark", self)
+        self.action_theme_dark.setCheckable(True)
+        self.action_theme_dark.triggered.connect(lambda: self.set_theme_preference("Dark"))
+        
+        theme_group = QActionGroup(self)
+        theme_group.addAction(self.action_theme_system)
+        theme_group.addAction(self.action_theme_light)
+        theme_group.addAction(self.action_theme_dark)
+        
+        theme_menu.addAction(self.action_theme_system)
+        theme_menu.addAction(self.action_theme_light)
+        theme_menu.addAction(self.action_theme_dark)
 
         # Audio Setup
         self.audio_player = QMediaPlayer()
@@ -345,10 +414,9 @@ class NewsCollectorApp(QMainWindow):
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
 
-        # Map Setup
-        self.map_view = QWebEngineView()
+        # Map Setup (Full screen)
+        self.map_view = QWebEngineView(central_widget)
         
         self.channel = QWebChannel()
         self.bridge = MapBridge(self)
@@ -358,52 +426,373 @@ class NewsCollectorApp(QMainWindow):
         html_path = os.path.abspath("map.html")
         self.map_view.setUrl(QUrl.fromLocalFile(html_path)) 
         
-        main_layout.addWidget(self.map_view, stretch=2)
+        map_layout = QVBoxLayout(central_widget)
+        map_layout.setContentsMargins(0, 0, 0, 0)
+        map_layout.addWidget(self.map_view)
 
-        # Right Panel Setup
-        right_panel = QVBoxLayout()
+        # Floating Output Panel (Top Right)
+        self.output_container = QWidget(central_widget)
+        self.output_container.setObjectName("OutputContainer")
         
-        self.ai_output = QTextBrowser() 
+        output_shadow = QGraphicsDropShadowEffect()
+        output_shadow.setBlurRadius(20)
+        output_shadow.setXOffset(0)
+        output_shadow.setYOffset(5)
+        output_shadow.setColor(QColor(0, 0, 0, 30))
+        self.output_container.setGraphicsEffect(output_shadow)
+
+        output_layout = QVBoxLayout(self.output_container)
+        output_layout.setContentsMargins(15, 15, 15, 15)
+        
+        self.ai_output = ZoomableTextBrowser() 
         self.ai_output.setOpenLinks(False) 
         self.ai_output.anchorClicked.connect(self.handle_link_click) 
         self.ai_output.setPlaceholderText("Loading Qwen model in background...")
+        output_layout.addWidget(self.ai_output)
+
+        # Floating Input Panel (Bottom Right)
+        self.input_container = QWidget(central_widget)
+        self.input_container.setStyleSheet("""
+            QWidget#InputContainer {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        self.input_container.setObjectName("InputContainer")
+
+        input_layout = QVBoxLayout(self.input_container)
+        input_layout.setContentsMargins(15, 15, 15, 15)
+        input_layout.setSpacing(10)
         
-        input_layout = QHBoxLayout()
+        top_input_layout = QHBoxLayout()
+        top_input_layout.setSpacing(10)
+        top_input_layout.setContentsMargins(0, 0, 0, 0)
         
         self.ai_prompt = PromptTextEdit()
         self.ai_prompt.send_requested.connect(self.handle_prompt)
-        self.ai_prompt.setPlaceholderText("Enter AI prompt here...")
+        self.ai_prompt.setPlaceholderText("Enter message...")
         self.ai_prompt.setMaximumHeight(60)
         
         self.send_button = QPushButton("Send")
         self.send_button.setMinimumHeight(60)
         self.send_button.clicked.connect(self.handle_prompt)
         
-        input_layout.addWidget(self.ai_prompt)
-        input_layout.addWidget(self.send_button)
+        top_input_layout.addWidget(self.ai_prompt)
+        top_input_layout.addWidget(self.send_button)
         
-        right_panel.addWidget(self.ai_output)
-        right_panel.addLayout(input_layout)
-
-        self.cyber_security_button = QPushButton("Scan for Cyber Security")
+        self.cyber_security_button = QPushButton("Cybersecurity Scan")
+        self.cyber_security_button.setMinimumHeight(40)
         self.cyber_security_button.clicked.connect(self.start_cyber_security_scan)
-        right_panel.addWidget(self.cyber_security_button)
+        
+        input_layout.addLayout(top_input_layout)
+        input_layout.addWidget(self.cyber_security_button)
+        
+        self.load_theme_preference()
+        self.apply_theme()
+        app = QApplication.instance()
+        if hasattr(app.styleHints(), 'colorSchemeChanged'):
+            app.styleHints().colorSchemeChanged.connect(self.apply_theme)
 
-        main_layout.addLayout(right_panel, stretch=1)
+    def update_clock(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        self.clock_label.setText(now.strftime("UTC %H:%M:%S"))
+
+    def load_theme_preference(self):
+        self.theme_preference = "System"
+        try:
+            if os.path.exists("ui_settings.json"):
+                with open("ui_settings.json", "r") as f:
+                    self.theme_preference = json.load(f).get("theme", "System")
+        except:
+            pass
+        
+        if self.theme_preference == "Light":
+            self.action_theme_light.setChecked(True)
+        elif self.theme_preference == "Dark":
+            self.action_theme_dark.setChecked(True)
+        else:
+            self.action_theme_system.setChecked(True)
+
+    def set_theme_preference(self, theme):
+        self.theme_preference = theme
+        try:
+            with open("ui_settings.json", "w") as f:
+                json.dump({"theme": theme}, f)
+        except:
+            pass
+        self.apply_theme()
+
+    def apply_theme(self):
+        app = QApplication.instance()
+        
+        if getattr(self, 'theme_preference', 'System') == "Light":
+            is_dark = False
+        elif getattr(self, 'theme_preference', 'System') == "Dark":
+            is_dark = True
+        else:
+            is_dark = False
+            if hasattr(app.styleHints(), 'colorScheme'):
+                is_dark = (app.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+            else:
+                is_dark = app.palette().color(QPalette.ColorRole.WindowText).lightness() > 128
+            
+        if is_dark:
+            bg_color = "rgba(30, 30, 30, 0.85)"
+            border_color = "rgba(80, 80, 80, 0.5)"
+            text_color = "#E0E0E0"
+            input_bg = "rgba(45, 45, 45, 0.9)"
+            input_border = "rgba(100, 100, 100, 0.6)"
+            input_focus = "rgba(150, 150, 150, 0.8)"
+            btn_bg = "rgba(60, 60, 60, 0.95)"
+            btn_text = "#E0E0E0"
+            btn_hover = "rgba(80, 80, 80, 1)"
+            btn_pressed = "rgba(45, 45, 45, 1)"
+            
+            scan_btn_bg = "rgba(45, 45, 45, 0.9)"
+            scan_btn_hover = "rgba(60, 60, 60, 1)"
+            scan_btn_pressed = "rgba(80, 80, 80, 0.9)"
+        else:
+            bg_color = "rgba(255, 255, 255, 0.85)"
+            border_color = "rgba(255, 255, 255, 0.5)"
+            text_color = "#3D3D3D"
+            input_bg = "rgba(255, 255, 255, 0.9)"
+            input_border = "rgba(200, 200, 200, 0.6)"
+            input_focus = "rgba(150, 150, 150, 0.8)"
+            btn_bg = "rgba(240, 240, 240, 0.95)"
+            btn_text = "#2F2F2F"
+            btn_hover = "rgba(255, 255, 255, 1)"
+            btn_pressed = "rgba(220, 220, 220, 1)"
+            
+            scan_btn_bg = "rgba(255, 255, 255, 0.9)"
+            scan_btn_hover = "#FFFFFF"
+            scan_btn_pressed = "rgba(230, 230, 230, 0.9)"
+
+        self.setStyleSheet(f"""
+            QMenuBar {{
+                background-color: {bg_color};
+                color: {text_color};
+                border-bottom: 1px solid {border_color};
+            }}
+            QMenuBar::item {{
+                background-color: transparent;
+                padding: 4px 10px;
+            }}
+            QMenuBar::item:selected {{
+                background-color: {btn_hover};
+            }}
+            QMenu {{
+                background-color: {bg_color};
+                color: {text_color};
+                border: 1px solid {border_color};
+            }}
+            QMenu::item:selected {{
+                background-color: {btn_hover};
+            }}
+        """)
+        
+        if hasattr(self, 'clock_label'):
+            self.clock_label.setStyleSheet(f"color: {text_color}; font-weight: 600; font-family: 'Inter', '-apple-system', 'Segoe UI', 'Roboto', sans-serif; font-size: 13px;")
+
+
+        self.output_container.setStyleSheet(f"""
+            QWidget#OutputContainer {{
+                background-color: {bg_color};
+                border: 1px solid {border_color};
+                border-radius: 12px;
+            }}
+        """)
+        
+        self.ai_output.setStyleSheet(f"""
+            QTextBrowser {{
+                background-color: transparent;
+                color: {text_color};
+                border: none;
+                font-family: 'Inter', '-apple-system', 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }}
+        """)
+        
+        self.ai_prompt.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {input_bg};
+                color: {text_color};
+                border: 1px solid {input_border};
+                border-radius: 8px;
+                padding: 10px;
+                font-family: 'Inter', '-apple-system', 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 14px;
+            }}
+            QTextEdit:focus {{
+                border: 1px solid {input_focus};
+                background-color: {input_bg};
+            }}
+        """)
+        
+
+        c = self.get_theme_colors()
+        doc_css = f'''
+        .sys {{ color: {c['sys']}; }}
+        .header {{ color: {c['header']}; font-weight: 600; }}
+        .text {{ color: {c['text']}; }}
+        .color-you {{ color: {c['you']}; font-weight: 600; }}
+        .color-qwen {{ color: {c['qwen']}; font-weight: 600; }}
+        .color-system {{ color: {c['system']}; font-weight: 600; }}
+        .color-collector {{ color: {c['collector']}; font-weight: 600; }}
+        hr {{ border: 0; border-top: 1px solid {c['divider']}; margin-bottom: 15px; }}
+        a.play-btn {{ color: {c['text']}; background-color: {c['btn_bg']}; border: 1px solid {c['divider']}; text-decoration: none; font-weight: 500; padding: 6px 12px; border-radius: 6px; }}
+        table td.sys-td {{ color: {c['sys']}; width: 160px; padding: 4px; vertical-align: top; }}
+        table td.text-td {{ color: {c['text']}; padding: 4px; }}
+        '''
+        self.ai_output.document().setDefaultStyleSheet(doc_css)
+        
+        # --- Dynamically re-color existing HTML history ---
+        old_html = self.ai_output.toHtml()
+        
+        if is_dark:
+            old_html = old_html.replace("#2d2d2d", "#D1D5DB").replace("#2D2D2D", "#D1D5DB")
+            old_html = old_html.replace("#6b6b6b", "#8E8EA0").replace("#6B6B6B", "#8E8EA0")
+            old_html = old_html.replace("#000000", "#FFFFFF")
+            old_html = old_html.replace("#b8860b", "#FFD700").replace("#B8860B", "#FFD700")
+            old_html = old_html.replace("#dc143c", "#FF6347").replace("#DC143C", "#FF6347")
+            old_html = old_html.replace("rgba(0, 0, 0, 0.1)", "rgba(255, 255, 255, 0.1)")
+            old_html = old_html.replace("rgba(0, 0, 0, 0.05)", "rgba(255, 255, 255, 0.1)")
+        else:
+            old_html = old_html.replace("#d1d5db", "#2D2D2D").replace("#D1D5DB", "#2D2D2D")
+            old_html = old_html.replace("#8e8ea0", "#6B6B6B").replace("#8E8EA0", "#6B6B6B")
+            old_html = old_html.replace("#ffffff", "#000000").replace("#FFFFFF", "#000000")
+            old_html = old_html.replace("#ffd700", "#B8860B").replace("#FFD700", "#B8860B")
+            old_html = old_html.replace("#ff6347", "#DC143C").replace("#FF6347", "#DC143C")
+            old_html = old_html.replace("rgba(255, 255, 255, 0.1)", "rgba(0, 0, 0, 0.1)")
+            
+        scrollbar = self.ai_output.verticalScrollBar()
+        scroll_val = scrollbar.value()
+        
+        self.ai_output.setHtml(old_html)
+        scrollbar.setValue(scroll_val)
+        
+        self.send_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {btn_bg};
+                color: {btn_text};
+                border: 1px solid {input_border};
+                border-radius: 8px;
+                padding: 0px 20px;
+                font-family: 'Inter', '-apple-system', 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {btn_hover}; border: 1px solid {input_focus}; }}
+            QPushButton:pressed {{ background-color: {btn_pressed}; }}
+        """)
+        
+        self.cyber_security_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {scan_btn_bg};
+                color: {text_color};
+                border: 1px solid {input_border};
+                border-radius: 8px;
+                padding: 10px;
+                font-family: 'Inter', '-apple-system', 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {scan_btn_hover}; border: 1px solid {input_focus}; }}
+            QPushButton:pressed {{ background-color: {scan_btn_pressed}; }}
+        """)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        
+        margin_right = 20
+        margin_top = 20
+        margin_bottom = 50
+        container_width = 450
+        input_height = 140
+        output_height = self.height() - margin_top - margin_bottom - input_height - 15
+        
+        if hasattr(self, 'output_container'):
+            self.output_container.setGeometry(
+                self.width() - container_width - margin_right,
+                margin_top,
+                container_width,
+                output_height
+            )
+            
+        if hasattr(self, 'input_container'):
+            self.input_container.setGeometry(
+                self.width() - container_width - margin_right,
+                self.height() - margin_bottom - input_height,
+                container_width,
+                input_height
+            )
+
+    def _reset_block_format(self):
+        cursor = self.ai_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        block_fmt = QTextBlockFormat()
+        block_fmt.setBackground(QColor(0, 0, 0, 0))
+        block_fmt.setTopMargin(0)
+        block_fmt.setBottomMargin(0)
+        block_fmt.setLeftMargin(0)
+        block_fmt.setRightMargin(0)
+        cursor.insertBlock(block_fmt)
+        self.ai_output.setTextCursor(cursor)
+
+    def get_theme_colors(self):
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QPalette
+        from PyQt6.QtCore import Qt
+        app = QApplication.instance()
+        if getattr(self, 'theme_preference', 'System') == "Light":
+            is_dark = False
+        elif getattr(self, 'theme_preference', 'System') == "Dark":
+            is_dark = True
+        else:
+            is_dark = False
+            if hasattr(app.styleHints(), 'colorScheme'):
+                is_dark = (app.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+            else:
+                is_dark = app.palette().color(QPalette.ColorRole.WindowText).lightness() > 128
+                
+        if is_dark:
+            return {"text": "#D1D5DB", "sys": "#8E8EA0", "header": "#FFFFFF", "divider": "rgba(255, 255, 255, 0.1)", "btn_bg": "rgba(255, 255, 255, 0.1)", "you": "#FFFFFF", "qwen": "#FFD700", "system": "#FF6347", "collector": "#4DA6FF"}
+        else:
+            return {"text": "#2D2D2D", "sys": "#6B6B6B", "header": "#000000", "divider": "rgba(0, 0, 0, 0.1)", "btn_bg": "rgba(0, 0, 0, 0.05)", "you": "#000000", "qwen": "#B8860B", "system": "#DC143C", "collector": "#0066CC"}
+
+    def _set_ai_block_format(self, title="Qwen Agent:"):
+        cursor = self.ai_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        block_fmt = QTextBlockFormat()
+        
+        block_fmt.setBackground(QColor(0, 0, 0, 0))
+        block_fmt.setTopMargin(15)
+        block_fmt.setBottomMargin(15)
+        block_fmt.setLeftMargin(0)
+        block_fmt.setRightMargin(15)
+        cursor.insertBlock(block_fmt)
+        
+        self.ai_output.setTextCursor(cursor)
+        self.ai_output.insertHtml(f"<b class='color-qwen'>{title} </b>")
+        
+        cursor = self.ai_output.textCursor()
+        char_fmt = QTextCharFormat()
+        char_fmt.setFontWeight(QFont.Weight.Normal)
+        cursor.setCharFormat(char_fmt)
+        self.ai_output.setTextCursor(cursor)
 
     def handle_prompt(self):
         user_text = self.ai_prompt.toPlainText().strip()
         if not user_text:
             return
 
-        self.ai_output.append(f"<b>You:</b> {user_text}<br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='text' style='margin-bottom:15px; padding: 10px 15px;'><b class='color-you'>You:</b><br><span>{user_text}</span></div>")
         self.ai_prompt.clear()
 
-        cursor = self.ai_output.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        self.ai_output.setTextCursor(cursor)
-        self.ai_output.insertHtml("<font color='#0055ff'><b>Qwen Agent:</b></font> ")
-
+        self._set_ai_block_format("Qwen Agent:")
         self.qwen_agent.generate_async(user_text)
 
         scrollbar = self.ai_output.verticalScrollBar()
@@ -414,13 +803,17 @@ class NewsCollectorApp(QMainWindow):
         if not user_text:
             return
 
-        self.ai_output.append(f"<b>You (Cyber Scan):</b> {user_text}<br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='text' style='margin-bottom:15px; padding: 10px 15px;'><b class='color-you'>You (Cyber Scan):</b><br><span>{user_text}</span></div>")
         self.ai_prompt.clear()
 
+        self._set_ai_block_format("System:")
+        
         cursor = self.ai_output.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText("Generating scan plan...\n")
         self.ai_output.setTextCursor(cursor)
-        self.ai_output.insertHtml("<font color='#0055ff'><b>System:</b></font> Generating scan plan...<br>")
 
         self.qwen_agent.generate_async(user_text, is_recon=True)
 
@@ -428,13 +821,17 @@ class NewsCollectorApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
 
     def on_recon_ready(self, response):
-        self.ai_output.append(f"<font color='green'><b>System:</b> Scan plan generated!</font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 5px; padding: 0 15px;'><b class='color-system'>System:</b> Scan plan generated!</div>")
         
         clean = response.strip()
+        import re
         match = re.search(r'\{.*\}', clean, re.DOTALL)
         if match:
             clean = match.group(0)
         try:
+            import json, os
             plan = json.loads(clean)
             
             base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -444,7 +841,8 @@ class NewsCollectorApp(QMainWindow):
             with open(recon_file, "w") as f:
                 json.dump(plan, f, indent=4)
                 
-            self.ai_output.append("<font color='orange'><b>System:</b> Running reconnaissance tools... This may take a while.</font><br>")
+            self._reset_block_format()
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System:</b> Running reconnaissance tools... This may take a while.</div>")
             scrollbar = self.ai_output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
             
@@ -454,22 +852,24 @@ class NewsCollectorApp(QMainWindow):
             self.recon_worker.start()
 
         except json.JSONDecodeError as e:
-            self.ai_output.append(f"<font color='red'><b>System Error:</b> Failed to parse JSON plan: {e}</font><br>")
-            self.ai_output.append(f"<pre>{response}</pre><br>")
+            self._reset_block_format()
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> Failed to parse JSON plan: {e}</div><pre class='text' style='padding: 0 15px;'>{response}</pre>")
             scrollbar = self.ai_output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
 
     def on_recon_finished(self, output, report_data):
+        self._reset_block_format()
+        c = self.get_theme_colors()
         if report_data:
-            html = self.format_report_html(report_data)
-            self.ai_output.append(html)
+            html = self.format_report_html(report_data, c)
+            self.ai_output.insertHtml(html)
         else:
-            self.ai_output.append(f"<font color='green'><b>System:</b> Reconnaissance complete:</font><br><pre>{output}</pre><br>")
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System:</b> Reconnaissance complete:</div><pre class='text' style='padding: 0 15px;'>{output}</pre>")
         
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def format_report_html(self, data):
+    def format_report_html(self, data, c):
         meta = data.get("meta", {})
         results = data.get("results", {})
         
@@ -477,40 +877,41 @@ class NewsCollectorApp(QMainWindow):
         target_type = meta.get("target_type", "Unknown")
         
         html = f"""
-        <div style="padding: 15px; color: #d4d4d4; margin-top: 10px; margin-bottom: 10px;">
-            <h2 style="margin-top: 0; margin-bottom: 10px;">RECON REPORT: {target} ({target_type.upper()})</h2>
-            <hr style="border: 1px solid #444; margin-bottom: 15px;">
+        <div class="text" style="padding: 15px; margin-bottom: 15px;">
+            <hr>
+            <h2 class="header" style="margin-top: 10px; margin-bottom: 10px;">CYBERSECURITY REPORT: {target} ({target_type.upper()})</h2>
+            <hr>
         """
         
         for tool, result in results.items():
             if "error" in result:
-                html += f"<div style='margin-bottom: 10px;'><b style='color: #f44747;'>[+] {tool.upper()}</b> <span style='color: #f44747;'>Failed: {result['error']}</span></div>"
+                html += f"<div style='margin-bottom: 10px;'><b style='class='header'>[+] {tool.upper()}</b> <span style='class='sys'>Failed: {result['error']}</span></div>"
                 continue
             
-            html += f"<div style='margin-bottom: 5px;'><b style='color: #569cd6;'>[+] {tool.upper()}</b></div>"
-            html += "<table style='margin-left: 15px; margin-bottom: 15px; border-collapse: collapse; width: 95%;'>"
+            html += f"<div style='margin-bottom: 5px;'><b style='class='header'>[+] {tool.upper()}</b></div>"
+            html += "<table style='margin-left: 15px; margin-bottom: 15px; border-collapse: collapse; width: 95%;' class='text'>"
             
             if tool == "whois" and "parsed" in result:
                 for k, v in result["parsed"].items():
                     val = "<br>".join(v) if isinstance(v, list) else v
-                    html += f"<tr><td style='color: #9cdcfe; width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td style='color: #ce9178; padding: 4px;'>{val}</td></tr>"
+                    html += f"<tr><td class='sys' style='width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td class='text' style='padding: 4px;'>{val}</td></tr>"
             
             elif tool == "dig":
                 for rec_type, records in result.items():
                     val = "<br>".join(records)
-                    html += f"<tr><td style='color: #9cdcfe; width: 160px; padding: 4px; vertical-align: top;'>{rec_type} Records</td><td style='color: #ce9178; padding: 4px;'>{val}</td></tr>"
+                    html += f"<tr><td class='sys' style='width: 160px; padding: 4px; vertical-align: top;'>{rec_type} Records</td><td class='text' style='padding: 4px;'>{val}</td></tr>"
                     
             elif tool in ["ipinfo", "virustotal", "shodan"]:
                 for k, v in result.items():
                     if k != "raw":
                         val = "<br>".join([str(x) for x in v]) if isinstance(v, list) else str(v)
-                        html += f"<tr><td style='color: #9cdcfe; width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td style='color: #ce9178; padding: 4px;'>{val}</td></tr>"
+                        html += f"<tr><td class='sys' style='width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td class='text' style='padding: 4px;'>{val}</td></tr>"
             
             else:
                 for k, v in result.items():
                     if k == "raw": continue
                     val = str(v).replace('\\n', '<br>')
-                    html += f"<tr><td style='color: #9cdcfe; width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td style='color: #ce9178; padding: 4px;'>{val}</td></tr>"
+                    html += f"<tr><td class='sys' style='width: 160px; padding: 4px; vertical-align: top;'>{k.replace('_', ' ').title()}</td><td class='text' style='padding: 4px;'>{val}</td></tr>"
             
             html += "</table>"
             
@@ -518,13 +919,18 @@ class NewsCollectorApp(QMainWindow):
         return html
 
     def on_recon_error(self, error):
-        self.ai_output.append(f"<font color='red'><b>System Error:</b> Reconnaissance failed: {error}</font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> Reconnaissance failed: {error}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_model_loaded(self):
-        self.ai_output.append("<font color='green'><i>System: Qwen model loaded successfully! Ready for instructions.</i></font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 15px; padding: 0 15px;'><b class='color-system'>System:</b> Qwen model loaded successfully! Ready for instructions.</div>")
         self.ai_output.setPlaceholderText("Qwen model loaded. Awaiting instructions...")
+
     def on_token_ready(self, token):
         cursor = self.ai_output.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
@@ -536,21 +942,20 @@ class NewsCollectorApp(QMainWindow):
         
     def on_agent_response(self, response):
         clean = response.strip()
+        import re, json
         match = re.search(r'\{.*\}', clean, re.DOTALL)
         if match:
             try:
                 data = json.loads(match.group(0))
                 if data.get("intent") == "news" or "keyword" in data:
-                    # Pass the raw response to on_news_ready which handles parsing again
                     self.on_news_ready(response)
                     return
             except Exception:
                 pass
                 
-        # If streaming was suppressed because it looked like JSON but it wasn't news intent
         if clean.startswith("{") or clean.startswith("```"):
             cursor = self.ai_output.textCursor()
-            cursor.movePosition(cursor.MoveOperation.End)
+            cursor.movePosition(QTextCursor.MoveOperation.End)
             self.ai_output.setTextCursor(cursor)
             self.ai_output.insertPlainText(response)
 
@@ -558,9 +963,10 @@ class NewsCollectorApp(QMainWindow):
         msg_id = str(self.message_counter)
         self.message_store[msg_id] = response
 
-        read_link = f"&nbsp;<a href='tts:{msg_id}' style='text-decoration:none;'>[▶ Read]</a><br><br>"
+        c = self.get_theme_colors()
+        read_link = f"<div style='margin-top: 15px; margin-bottom: 5px; padding: 0 15px;'><a href='tts:{msg_id}' class='text' style='text-decoration: none; font-weight: 500; background-color: {c['btn_bg']}; padding: 6px 12px; border-radius: 6px; border: 1px solid {c['divider']};'>▶ Listen</a></div><br>"
         cursor = self.ai_output.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.ai_output.setTextCursor(cursor)
         self.ai_output.insertHtml(read_link)
         
@@ -568,11 +974,13 @@ class NewsCollectorApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
 
     def on_agent_error(self, error_msg):
-        self.ai_output.append(f"<font color='red'><b>Agent Error:</b> {error_msg}</font><br><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 15px; padding: 0 15px;'><b style='font-weight: 600;'>Agent Error:</b> {error_msg}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def handle_link_click(self, url: QUrl):
+    def handle_link_click(self, url):
         if url.scheme() == "tts":
             if self.audio_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
                 self.audio_player.stop()
@@ -589,7 +997,7 @@ class NewsCollectorApp(QMainWindow):
             if isinstance(data, str):
                 data = {"summary": data}
                 
-            import hashlib
+            import hashlib, json, os
             content_str = json.dumps(data, sort_keys=True)
             content_hash = hashlib.md5(content_str.encode()).hexdigest()[:10]
                 
@@ -597,10 +1005,13 @@ class NewsCollectorApp(QMainWindow):
             os.makedirs("voice", exist_ok=True)
             
             if os.path.exists(audio_path):
+                from PyQt6.QtCore import QUrl
                 self.audio_player.setSource(QUrl.fromLocalFile(audio_path))
                 self.audio_player.play()
             else:
-                self.ai_output.append(f"<font color='orange'><i>System: Generating audio briefing for message {msg_id}...</i></font><br>")
+                self._reset_block_format()
+                c = self.get_theme_colors()
+                self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'>System: Generating audio briefing for message {msg_id}...</div>")
                 scrollbar = self.ai_output.verticalScrollBar()
                 scrollbar.setValue(scrollbar.maximum())
                 
@@ -610,15 +1021,20 @@ class NewsCollectorApp(QMainWindow):
                 self.tts_worker.start()
 
     def on_tts_finished(self, audio_path):
-        self.ai_output.append("<font color='green'><i>System: Audio briefing ready. Playing...</i></font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'>System: Audio briefing ready. Playing...</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
         
+        from PyQt6.QtCore import QUrl
         self.audio_player.setSource(QUrl.fromLocalFile(audio_path))
         self.audio_player.play()
 
     def on_tts_error(self, error):
-        self.ai_output.append(f"<font color='red'><i>System Error: TTS generation failed: {error}</i></font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> TTS generation failed: {error}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
@@ -629,14 +1045,17 @@ class NewsCollectorApp(QMainWindow):
 
     def on_news_ready(self, response):
         clean = response.strip()
+        import re, json, os
         match = re.search(r'\{.*\}', clean, re.DOTALL)
         if match:
             clean = match.group(0)
         try:
             plan = json.loads(clean)
             error = plan.get("error")
+            c = self.get_theme_colors()
             if error:
-                self.ai_output.append(f"<font color='red'><b>Agent:</b> {error}</font><br>")
+                self._reset_block_format()
+                self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b style='font-weight: 600;'>Agent Error:</b> {error}</div>")
                 scrollbar = self.ai_output.verticalScrollBar()
                 scrollbar.setValue(scrollbar.maximum())
                 return
@@ -644,7 +1063,8 @@ class NewsCollectorApp(QMainWindow):
             keyword = plan.get("keyword", "news")
             hours = plan.get("hours", 24)
             
-            self.ai_output.append(f"<font color='green'><b>System:</b> Request parsed. Topic: {keyword}, Hours: {hours}. Running collector...</font><br>")
+            self._reset_block_format()
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System:</b> Request parsed. Topic: {keyword}, Hours: {hours}. Running collector...</div>")
             scrollbar = self.ai_output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
             
@@ -658,22 +1078,34 @@ class NewsCollectorApp(QMainWindow):
             self.news_worker.start()
 
         except json.JSONDecodeError as e:
-            self.ai_output.append(f"<font color='red'><b>System Error:</b> Failed to parse JSON plan: {e}</font><br>")
-            self.ai_output.append(f"<pre>{response}</pre><br>")
+            self._reset_block_format()
+            c = self.get_theme_colors()
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> Failed to parse JSON plan: {e}</div><pre class='text' style='padding: 0 15px;'>{response}</pre>")
             scrollbar = self.ai_output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
 
     def on_news_progress(self, msg):
-        self.ai_output.append(f"<font color='gray'><i>Collector: {msg}</i></font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        if msg.startswith("FOUND_ARTICLE:"):
+            title = msg.replace("FOUND_ARTICLE:", "", 1)
+            self.ai_output.insertHtml(f"<div class='text' style='margin-bottom: 3px; padding: 0 15px; margin-left: 20px; color: {c['sys']}; font-size: 13px;'>└─ 📄 {title}</div>")
+        else:
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 5px; padding: 0 15px;'><b class='color-collector'>Collector:</b> {msg}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_news_finished(self, output, report_data):
-        self.ai_output.append("<font color='green'><b>System:</b> News collected successfully.</font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        html = f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System:</b> News collected successfully."
         if report_data:
-            self.ai_output.append(f"<font color='green'>Found {len(report_data)} articles.</font><br>")
-            self.ai_output.append("<font color='orange'><b>System:</b> Summarizing news with AI...</font><br>")
+            html += f"<br><br>Found {len(report_data)} articles.<br><br><b class='color-system'>System:</b> Summarizing news with AI..."
+        html += "</div>"
+        self.ai_output.insertHtml(html)
+        if report_data:
             
+            import os, json
             token_path = "ai_settings.json"
             api_key = ""
             provider = "gemini"
@@ -687,7 +1119,7 @@ class NewsCollectorApp(QMainWindow):
                     pass
                     
             if not api_key:
-                self.ai_output.append(f"<font color='red'><b>System Error:</b> {provider.capitalize()} API Key is missing. Please set it via Configuration > Set API Key.</font><br>")
+                self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> {provider.capitalize()} API Key is missing. Please set it via Configuration > Set API Key.</div>")
                 scrollbar = self.ai_output.verticalScrollBar()
                 scrollbar.setValue(scrollbar.maximum())
                 return
@@ -697,14 +1129,15 @@ class NewsCollectorApp(QMainWindow):
             self.summary_worker.error.connect(self.on_summary_error)
             self.summary_worker.start()
         else:
-            self.ai_output.append("<font color='red'><b>System Error:</b> No report data collected to summarize.</font><br>")
+            self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> No report data collected to summarize.</div>")
             
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_summary_finished(self, summary_data):
-        self.ai_output.append("<font color='green'><b>System:</b> Summary generation complete.</font><br>")
-        # print(summary_data)
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System:</b> Summary generation complete.</div>")
         summary_text = summary_data.get("summary", "No summary available.")
         
         locations = summary_data.get("locations", [])
@@ -725,25 +1158,29 @@ class NewsCollectorApp(QMainWindow):
         msg_id = str(self.message_counter)
         self.message_store[msg_id] = summary_data
         
-        html_summary = re.sub(r'#+\s*(.*)', r'<h3 style="color:#569cd6; margin-bottom: 5px; margin-top: 15px;">\1</h3>', summary_text)
+        import re
+        html_summary = re.sub(r'#+\s*(.*)', rf'<h3 style="color:{c["header"]}; margin-bottom: 5px; margin-top: 15px; font-weight: 600;">\1</h3><hr>', summary_text)
+        html_summary = re.sub(r'<hr>\s+', '<hr>', html_summary)
         html_summary = html_summary.replace('\n', '<br>')
         
         sources = summary_data.get("sources", [])
         sources_html = ""
         if sources:
             sources_list = ", ".join(sources)
-            sources_html = f"<div style='margin-top: 20px; color: #858585; font-size: 0.9em; font-style: italic; border-top: 1px dashed #555; padding-top: 10px;'><b>Sources:</b> {sources_list}</div>"
+            sources_html = f"<div class='sys' style='margin-top: 20px; font-size: 0.9em; border-top: 1px solid {c['divider']}; padding-top: 10px;'><b>Sources:</b> {sources_list}</div>"
 
         html = f"""
-        <div style="padding: 15px; margin-top: 10px; margin-bottom: 10px;">
-            <h2 style="margin-top: 0; margin-bottom: 10px;">AI NEWS SUMMARY</h2>
-            <hr style="border: 1px solid #444; margin-bottom: 15px;">
+        <div class='text' style="padding: 15px; margin-top: 10px; margin-bottom: 10px;">
+            <hr style="margin-top: 5px; margin-bottom: 15px;">
+            <h2 class=\'header\' style="margin-top: 0; margin-bottom: 10px;">OSINT REPORT</h2>
+            <hr>
             {html_summary}
             {sources_html}
-        </div><br>
-        &nbsp;<a href='tts:{msg_id}' style='text-decoration:none;'>[▶ Read]</a><br><br>
+        </div>
+        <div style='margin-top: 15px; margin-bottom: 25px; padding: 0 15px;'><a href='tts:{msg_id}' class='play-btn'>▶ Listen</a></div>
         """
-        self.ai_output.append(html)
+        self._reset_block_format()
+        self.ai_output.insertHtml(html)
         
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -762,10 +1199,8 @@ class NewsCollectorApp(QMainWindow):
             
             titles_html = "<br>".join([f"• {t}" for t in titles])
             popup_text = f"<b>{loc_name}</b><br>{titles_html}" if titles else f"<b>{loc_name}</b>"
-            # Escape single quotes for JS
             popup_text = popup_text.replace("'", "\\'")
             
-            # self.ai_output.append(f"<font color='green'><i>System: Placed marker at {loc_name} (Lat: {lat:.4f}, Lng: {lng:.4f})</i></font><br>")
             self.add_marker_to_map(lat, lng, popup_text)
             
         scrollbar = self.ai_output.verticalScrollBar()
@@ -779,17 +1214,23 @@ class NewsCollectorApp(QMainWindow):
             self.map_view.page().runJavaScript(js_code)
 
     def on_location_error(self, error_msg):
-        self.ai_output.append(f"<font color='orange'><i>System Warning: Could not find map coordinates for location - {error_msg}</i></font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'>System Warning: Could not find map coordinates for location - {error_msg}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_summary_error(self, error):
-        self.ai_output.append(f"<font color='red'><b>System Error:</b> Summarization failed: {error}</font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> Summarization failed: {error}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def on_news_error(self, error):
-        self.ai_output.append(f"<font color='red'><b>System Error:</b> News collector failed: {error}</font><br>")
+        self._reset_block_format()
+        c = self.get_theme_colors()
+        self.ai_output.insertHtml(f"<div class='sys' style='margin-bottom: 10px; padding: 0 15px;'><b class='color-system'>System Error:</b> News collector failed: {error}</div>")
         scrollbar = self.ai_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 

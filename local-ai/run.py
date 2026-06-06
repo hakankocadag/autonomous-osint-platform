@@ -5,6 +5,10 @@ import os
 import re
 import shutil
 from datetime import datetime, timezone
+import io
+
+if isinstance(sys.stdout, io.TextIOWrapper):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 R    = "\033[0m"
 B    = "\033[1m"
@@ -61,67 +65,62 @@ def run_cmd(cmd: list[str], timeout: int = 30) -> str:
 
 
 def run_whois(target: str) -> dict:
-    raw = run_cmd(["whois", target])
-    parsed: dict = {}
-    patterns = {
-        "registrar":       r"(?i)registrar:\s*(.+)",
-        "creation_date":   r"(?i)creation date:\s*(.+)",
-        "expiry_date":     r"(?i)expir\w+ date:\s*(.+)",
-        "updated_date":    r"(?i)updated date:\s*(.+)",
-        "name_servers":    r"(?i)name server:\s*(.+)",
-        "registrant_org":  r"(?i)registrant organization:\s*(.+)",
-        "registrant_country": r"(?i)registrant country:\s*(.+)",
-        "status":          r"(?i)domain status:\s*(.+)",
-    }
-    for key, pat in patterns.items():
-        hits = re.findall(pat, raw)
-        if hits:
-            parsed[key] = [h.strip() for h in hits] if len(hits) > 1 else hits[0].strip()
-
-    for k, v in parsed.items():
-        val = ", ".join(v) if isinstance(v, list) else v
-        _kv(k, val)
-    if not parsed:
-        print(f"  {DIM}{raw[:500]}{R}")
-
-    return {"raw": raw, "parsed": parsed}
+    import whois
+    try:
+        w = whois.whois(target)
+        parsed = {}
+        if w:
+            for k, v in w.items():
+                if v:
+                    val = ", ".join(v) if isinstance(v, list) else str(v)
+                    parsed[k] = val
+                    _kv(str(k), val)
+        return {"raw": str(w), "parsed": parsed}
+    except Exception as e:
+        return {"raw": f"ERROR: {e}", "parsed": {}}
 
 
 def run_dig(domain: str) -> dict:
+    import dns.resolver
     record_types = ["A", "MX", "NS", "TXT", "AAAA"]
     result: dict = {}
     for rtype in record_types:
-        out = run_cmd(["dig", "+short", domain, rtype])
-        if out and "(no output)" not in out and "ERROR" not in out:
-            result[rtype] = [line.strip() for line in out.splitlines() if line.strip()]
-            print(f"  {DIM}{rtype} records:{R}")
-            for rec in result[rtype]:
-                print(f"    {SILV}{rec}{R}")
+        try:
+            answers = dns.resolver.resolve(domain, rtype)
+            result[rtype] = [str(r) for r in answers]
+            if result[rtype]:
+                print(f"  {DIM}{rtype} records:{R}")
+                for rec in result[rtype]:
+                    print(f"    {SILV}{rec}{R}")
+        except Exception:
+            pass
     return result
 
 
 def run_whatweb(target: str) -> dict:
-    raw = run_cmd(["whatweb", "-v", target], timeout=45)
-    parsed: dict = {"technologies": [], "server": None, "cms": None, "raw": raw}
-
-    tech_hits = re.findall(r'\[([^\[\]]+)\]', raw)
-    seen = set()
-    for hit in tech_hits:
-        for item in hit.split(","):
-            t = item.strip().split("[")[0].strip()
-            if t and t not in seen and len(t) > 1:
-                seen.add(t)
-                parsed["technologies"].append(t)
-
-    for line in raw.splitlines():
-        if re.search(r'(?i)apache|nginx|iis|caddy|lighttpd', line):
-            m = re.search(r'(?i)(apache|nginx|iis|caddy|lighttpd)[^\s,\]]*', line)
-            if m:
-                parsed["server"] = m.group(0)
-        if re.search(r'(?i)wordpress|joomla|drupal|magento', line):
-            m = re.search(r'(?i)(wordpress|joomla|drupal|magento)[^\s,\]]*', line)
-            if m:
-                parsed["cms"] = m.group(0)
+    from Wappalyzer import Wappalyzer, WebPage
+    parsed: dict = {"technologies": [], "server": None, "cms": None, "raw": ""}
+    try:
+        wapp = Wappalyzer.latest()
+        if not target.startswith("http"):
+            target = "http://" + target
+        webpage = WebPage.new_from_url(target)
+        techs = wapp.analyze_with_versions_and_categories(webpage)
+        
+        server_keywords = ["apache", "nginx", "iis", "caddy", "lighttpd"]
+        cms_keywords = ["wordpress", "joomla", "drupal", "magento"]
+        
+        for t, info in techs.items():
+            parsed["technologies"].append(t)
+            t_lower = t.lower()
+            if any(s in t_lower for s in server_keywords):
+                parsed["server"] = t
+            if any(c in t_lower for c in cms_keywords):
+                parsed["cms"] = t
+                
+        parsed["raw"] = str(techs)
+    except Exception as e:
+        parsed["raw"] = f"ERROR: {e}"
 
     _kv("server",       parsed["server"] or "unknown")
     _kv("cms",          parsed["cms"]    or "unknown")
@@ -130,46 +129,64 @@ def run_whatweb(target: str) -> dict:
 
 
 def run_nmap(target: str) -> dict:
-    raw = run_cmd(["nmap", "-T4", "--top-ports", "100", "-sV", target], timeout=120)
+    import socket
+    import concurrent.futures
     ports: list[dict] = []
-    for line in raw.splitlines():
-        m = re.match(
-            r'(\d+)/(tcp|udp)\s+(open|closed|filtered)\s+(\S+)(?:\s+(.+))?',
-            line.strip()
+    top_ports = [21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080]
+    
+    def check_port(port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            if s.connect_ex((target, port)) == 0:
+                try:
+                    service = socket.getservbyport(port)
+                except:
+                    service = "unknown"
+                return {"port": port, "protocol": "tcp", "state": "open", "service": service, "version": None}
+        return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(check_port, top_ports)
+        for r in results:
+            if r:
+                ports.append(r)
+                
+    for entry in ports:
+        col = G if entry["state"] == "open" else GRAY
+        _kv(
+            f"{entry['port']}/{entry['protocol']}",
+            f"{entry['state']}  {entry['service']}  {entry['version'] or ''}",
+            val_color=col
         )
-        if m:
-            entry = {
-                "port":     int(m.group(1)),
-                "protocol": m.group(2),
-                "state":    m.group(3),
-                "service":  m.group(4),
-                "version":  (m.group(5) or "").strip() or None,
-            }
-            ports.append(entry)
-            col = G if entry["state"] == "open" else GRAY
-            _kv(
-                f"{entry['port']}/{entry['protocol']}",
-                f"{entry['state']}  {entry['service']}  {entry['version'] or ''}",
-                val_color=col
-            )
-    if not ports:
-        print(f"  {DIM}{raw[:600]}{R}")
-    return {"ports": ports, "raw": raw}
+    return {"ports": ports, "raw": "Python Native Socket Scan"}
 
 
 def run_traceroute(target: str) -> dict:
-    raw = run_cmd(["traceroute", "-m", "15", target], timeout=60)
+    cmd = ["tracert", "-h", "15", target] if os.name == 'nt' else ["traceroute", "-m", "15", target]
+    raw = run_cmd(cmd, timeout=60)
     hops: list[dict] = []
+    
     for line in raw.splitlines():
-        m = re.match(r'\s*(\d+)\s+([\d.*]+(?:\s+[\d.*]+)*)\s*(.*)', line)
+        m1 = re.search(r'^\s*(\d+)\s+(?:[<*]\s*\d+\s*ms|\*\s*|\d+\s*ms\s+)+(.+)', line)
+        m2 = re.match(r'\s*(\d+)\s+([\d.*]+(?:\s+[\d.*]+)*)\s*(.*)', line)
+        m = m1 if os.name == 'nt' else m2
         if m:
+            if os.name == 'nt':
+                addr_info = m.group(2).strip()
+                addr = addr_info.split()[-1].strip("[]") if "[" in addr_info else addr_info.split()[0]
+                info = addr_info if addr != addr_info else None
+            else:
+                addr = m.group(2).split()[0]
+                info = m.group(3).strip() or None
+                
             hop = {
                 "hop": int(m.group(1)),
-                "address": m.group(2).split()[0],
-                "info": m.group(3).strip() or None,
+                "address": addr,
+                "info": info,
             }
             hops.append(hop)
             _kv(f"hop {hop['hop']}", f"{hop['address']}  {hop['info'] or ''}")
+            
     if not hops:
         print(f"  {DIM}{raw[:600]}{R}")
     return {"hops": hops, "raw": raw}
@@ -446,6 +463,7 @@ def main():
     report = sanitise(report)
 
     safe_name   = re.sub(r'[^\w\-.]', '_', target)
+    os.makedirs("reports", exist_ok=True)
     report_file = f"reports/report_{safe_name}.json"
     
     with open(report_file, "w", encoding="utf-8") as f:
