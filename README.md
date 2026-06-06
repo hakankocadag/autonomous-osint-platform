@@ -11,7 +11,7 @@ Built using advanced Python concepts such as **Asynchronous programming (asyncio
 
 ---
 <img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 134144" src="https://github.com/user-attachments/assets/91957ab4-504d-411e-990f-c6ab027118db" />
----
+
 
 ##  Core Features & Workflow
 
@@ -37,7 +37,7 @@ Built using advanced Python concepts such as **Asynchronous programming (asyncio
 
 ---
 <img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 134004" src="https://github.com/user-attachments/assets/0b17a167-5418-4320-b61a-b479ca322555" />
----
+
 
 ##  Team Architecture & Technical Specifications
 
@@ -89,7 +89,7 @@ autonomous-osint-platform/
 
 ---
 <img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 133359" src="https://github.com/user-attachments/assets/6e9fadd1-a8ab-474b-af01-6babc7d11c5f" />
----
+
 
 ##  Installation & Usage
 
