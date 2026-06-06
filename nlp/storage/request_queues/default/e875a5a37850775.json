@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://www.bbc.com/news/articles/cy8286nqz87o",
+  "url": "https://www.bbc.com/news/articles/cy8286nqz87o",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:05.733003+00:00"
+}

@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://apnews.com/world-news",
+  "url": "https://apnews.com/world-news",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:02.899905+00:00"
+}

@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://www.reuters.com/world",
+  "url": "https://www.reuters.com/world/",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:01:48.026455+00:00"
+}

@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://apnews.com/article/electricity-world-cup-england-scotland-545cc5eb30043786e5a02c2f8e1f0b44",
+  "url": "https://apnews.com/article/electricity-world-cup-england-scotland-545cc5eb30043786e5a02c2f8e1f0b44",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:04.738993+00:00"
+}

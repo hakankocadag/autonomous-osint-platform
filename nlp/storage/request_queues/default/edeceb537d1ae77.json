@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://apnews.com/hub/fifa-world-cup",
+  "url": "https://apnews.com/hub/fifa-world-cup",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:05.891531+00:00"
+}

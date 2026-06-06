@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://www.theguardian.com/football/world-cup-2026",
+  "url": "https://www.theguardian.com/football/world-cup-2026",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:05.852352+00:00"
+}

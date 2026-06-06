@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://www.bbc.com/news/world",
+  "url": "https://www.bbc.com/news/world",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:01:50.639781+00:00"
+}

@@ -1,0 +1,16 @@
+{
+  "unique_key": "https://apnews.com/article/world-cup-mexico-city-protests-teachers-disappeared-sheinbaum-7aae14e134143f97093f146c36b9443c",
+  "url": "https://apnews.com/article/world-cup-mexico-city-protests-teachers-disappeared-sheinbaum-7aae14e134143f97093f146c36b9443c",
+  "method": "GET",
+  "payload": null,
+  "headers": {},
+  "user_data": {
+    "__crawlee": {
+      "state": 4
+    }
+  },
+  "retry_count": 0,
+  "no_retry": false,
+  "loaded_url": null,
+  "handled_at": "2026-06-06 17:02:05.727488+00:00"
+}

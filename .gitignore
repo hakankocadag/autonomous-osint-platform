@@ -48,3 +48,5 @@ outputs/audio/*.wav
 .idea/
 .DS_Store
 Thumbs.db
+local-ai/
+*.mp3
