@@ -38,6 +38,9 @@ Built using advanced Python concepts such as **Asynchronous programming (asyncio
 - **Audio Briefings:** Converts complex AI-generated text reports into professional-grade audio briefings using `edge-tts` and plays them directly inside the app.
 
 ---
+<img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 134004" src="https://github.com/user-attachments/assets/0b17a167-5418-4320-b61a-b479ca322555" />
+
+---
 
 ##  Team Architecture & Technical Specifications
 
@@ -86,6 +89,9 @@ autonomous-osint-platform/
 2. **Generate Small Components:** Prefer single classes or functions. Avoid massive auto-generated files.
 3. **Enforce Code Quality:** Always request Type hints and Google-style docstrings.
 4. **Review Everything:** Never blindly trust AI-generated code. Carefully inspect async logic, PyTorch operations, and External APIs.
+
+---
+<img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 133941" src="https://github.com/user-attachments/assets/918e7d09-c12b-42f0-a4f2-213d865ac282" />
 
 ---
 
