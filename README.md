@@ -1,4 +1,4 @@
-# 👁️ OmniSense: AI-Powered Autonomous OSINT Platform
+#  OmniSense: AI-Powered Autonomous OSINT Platform
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![PyQt6](https://img.shields.io/badge/PyQt6-UI-green)
@@ -11,31 +11,31 @@ Built using advanced Python concepts such as **Asynchronous programming (asyncio
 
 ---
 
-## 🚀 Core Features & Workflow
+##  Core Features & Workflow
 
-### 1. 🕷️ Autonomous Data Collection (Agent Swarm)
+### 1.  Autonomous Data Collection (Agent Swarm)
 - **Concurrent Web-Scraping Agents:** Gathers raw data based on user queries (e.g., geopolitical events, market trends) or cybersecurity targets.
 - **Dual-Engine Scraping:** Uses `aiohttp` for fast static scraping and `Playwright` via `Crawlee` for dynamic, JavaScript-heavy sites.
 - **Live Telemetry:** Streams real-time updates directly to the UI, providing a live tree-view of discovered articles and scanning targets.
 
-### 2. 🧠 NLP Processing Pipeline
+### 2.  NLP Processing Pipeline
 - Follows **SOLID principles** and the **Chain of Responsibility** pattern.
 - Cleans and filters noisy HTML data, extracts meaningful signals, and performs text normalization using `spaCy` and `BeautifulSoup`.
 - Operates asynchronously utilizing `asyncio.Queue` for fully non-blocking data consumption.
 
-### 3. 🤖 AI Intelligence & Reconnaissance
+### 3.  AI Intelligence & Reconnaissance
 - **Routing:** Dynamically routes processed data using the Strategy Design Pattern.
 - **Inference Engines:** Uses a locally fine-tuned PyTorch LLM (e.g., QWEN / LLaMA) optimized with Quantization and FlashAttention, OR falls back to Cloud AI APIs (like Google Gemini).
 - **Cybersecurity Recon:** Built-in module to generate automated cybersecurity attack surface and reconnaissance reports.
 
-### 4. 🖥️ Interactive UI & Output Delivery
+### 4.  Interactive UI & Output Delivery
 - **Real-Time Terminal:** Built with **PyQt6**, the UI features a beautiful terminal-like streaming output with Dark/Light mode support and dynamic color styling.
 - **Geospatial Mapping:** Integrates an interactive Folium map to plot geopolitical events or IP locations visually.
 - **Audio Briefings:** Converts complex AI-generated text reports into professional-grade audio briefings using `edge-tts` and plays them directly inside the app.
 
 ---
 
-## 👥 Team Architecture & Technical Specifications
+##  Team Architecture & Technical Specifications
 
 | Member | Role & Responsibilities | Core Technologies |
 | :--- | :--- | :--- |
@@ -46,7 +46,7 @@ Built using advanced Python concepts such as **Asynchronous programming (asyncio
 
 ---
 
-## 🛠️ Project Structure
+##  Project Structure
 
 ```text
 autonomous-osint-platform/
@@ -62,7 +62,7 @@ autonomous-osint-platform/
 
 ---
 
-## 📋 Standard Operating Procedures (SOPs)
+##  Standard Operating Procedures (SOPs)
 
 ### 3.1 Project Management (Trello Kanban)
 - **Card Naming Format:** `[Name: DD.MM.YYYY] Task Description`
@@ -85,7 +85,7 @@ autonomous-osint-platform/
 
 ---
 
-## ⚙️ Installation & Usage
+##  Installation & Usage
 
 1. **Clone the Repository:**
    ```bash
