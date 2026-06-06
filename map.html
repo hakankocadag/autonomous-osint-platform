@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+
+<head>
+    <meta charset="utf-8">
+    <title>OSINT Map</title>
+
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <link rel="stylesheet" href="leaflet.css" />
+    <script src="leaflet.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            background-color: #dddddd;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        console.log("Checkpoint 1: Script started");
+        
+        // Fix for missing local marker images by falling back to CDN
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        });
+
+        // Initialize the Map
+        var map = L.map('map').setView([39.0, 35.0], 6);
+        console.log("Checkpoint 2: Map object created");
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        console.log("Checkpoint 3: Tile layer added");
+
+        var backend = null;
+
+        // 2. Setup the WebChannel connection to Python
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            backend = channel.objects.backend;
+        });
+
+        // 3. JS to Python: Send coordinates when the map is clicked
+        map.on('click', function (e) {
+            if (backend) {
+                // Call the Python method 'receive_coordinates'
+                backend.receive_coordinates(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
+        var markers = [];
+
+        // 4. Python to JS: A function Python can call to drop markers
+        function addMarker(lat, lng, popupText) {
+            var marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup(popupText)
+                .openPopup();
+            
+            markers.push(marker);
+
+            // Pan the map to the new marker
+            map.panTo(new L.LatLng(lat, lng));
+        }
+
+        function clearMarkers() {
+            for(var i = 0; i < markers.length; i++) {
+                map.removeLayer(markers[i]);
+            }
+            markers = [];
+        }
+    </script>
+</body>
+
+</html>
