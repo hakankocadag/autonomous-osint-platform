@@ -132,9 +132,15 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
             edge_success = False
             try:
                 import subprocess
+                import tempfile
+                
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.txt') as f:
+                    f.write(script)
+                    temp_script_path = f.name
+                
                 command = [
                     "edge-tts",
-                    "--text", script,
+                    "--file", temp_script_path,
                     "--voice", voice,
                     f"--rate={rate}",
                     f"--pitch={pitch}",
@@ -144,6 +150,11 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
                 result = subprocess.run(command, capture_output=True, text=True, check=True)
                 logger.info(f"Audio briefing successfully saved to {output_file} using edge-tts.")
                 edge_success = True
+                
+                try:
+                    os.remove(temp_script_path)
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error("edge-tts failed, falling back to gTTS.")
                 

@@ -38,3 +38,14 @@ edge-tts==6.1.9          # High-quality Text-to-Speech generation
 # 5. Environment & Utilities (Global)
 # ------------------------------------------
 python-dotenv==1.0.1     # Managing API keys (DeepSeek, Gemini) safely
+
+# ------------------------------------------
+# 6. Newly Discovered Dependencies
+# ------------------------------------------
+transformers             # Used in run_qwen.py, local-ai/run.py
+crawlee                  # Used in nlp/test_swarm.py, ai-tts/test_swarm.py
+python-Wappalyzer        # Used in local-ai/run.py
+dnspython                # Used in local-ai/run.py
+python-whois             # Used in local-ai/run.py
+gTTS                     # Used in ai-tts/tts_service.py
+browserforge             # Required by crawlee
