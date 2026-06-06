@@ -147,16 +147,18 @@ Schema:
 {self.prompt}
 </DATA>"""
                 else:
-                    final_prompt = f"""You are an advanced AI assistant with real-time news gathering capabilities.
-Your job is to determine if the user's input requires searching the web for recent news, events, or updates.
-If the user asks ANY question about recent news, current events, or asks for updates on a topic (even if phrased as a yes/no question like "are there any news about X?"), you MUST trigger the news gathering tool by outputting ONLY a JSON object with the following schema and nothing else:
+                    final_prompt = f"""You are an assistant that extracts news query parameters.
+Given the user's request, extract the topic/keyword and the hours to look back.
+If no hours are provided, use 24.
+If the prompt is invalid or doesn't ask for news, set "error" to a message like "I could not find the news" or "prompt wrong".
+Output ONLY a valid JSON object — no explanation, no markdown, no extra text.
+
+Schema:
 {{
-  "intent": "news",
-  "keyword": "<topic or keyword extracted from the prompt>",
-  "hours": <number of hours to look back, default 24>
+  "keyword": "<topic or keyword>",
+  "hours": <number of hours, default 24>,
+  "error": "<error message if invalid, or null>"
 }}
-Do not answer the question directly if it's about recent news; always use the JSON format so the system can fetch the latest data.
-Only if the user's request is a regular chat or a general knowledge question not requiring recent news, respond normally as a helpful AI assistant without using JSON.
 
 <DATA>
 {self.prompt}

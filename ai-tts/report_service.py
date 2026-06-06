@@ -52,7 +52,7 @@ def _make_http_request_with_retry(url: str, headers: dict, payload: dict) -> dic
     last_error = "Unknown error"
     for attempt in range(max_retries):
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
             if response.status_code == 200:
                 return response.json()
             elif response.status_code in [503, 429, 500, 502, 504]:
@@ -129,7 +129,7 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
         "topics": [],
         "confidence_level": "Low",
         "key_judgments": [],
-        "summary": "AI report generation failed because the selected provider was temporarily unavailable."
+        "summary": "AI report generation failed. The provider returned a malformed or non-JSON response."
     }
     
     if not raw_response:
@@ -249,11 +249,11 @@ def generate_summary_report(cleaned_data: Any, provider: str, api_key: str, mode
         structured_data = {
             "sources": [],
             "category": "Unknown",
-            "location": "Unknown",
+            "locations": [],
             "keywords": [],
             "confidence_level": "Low",
             "key_judgments": [],
-            "summary": "AI report generation failed because the selected providers were temporarily unavailable."
+            "summary": f"AI report generation failed. Error: {error_msg}"
         }
     else:
         structured_data = parse_and_validate_json(raw_response)
