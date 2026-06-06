@@ -10,6 +10,10 @@
 Built using advanced Python concepts such as **Asynchronous programming (asyncio)**, **Object-Oriented Design**, and **Custom AI architectures (PyTorch)**, it combines real-time data scraping with state-of-the-art NLP pipelines and an interactive desktop application.
 
 ---
+<img width="1279" height="764" alt="Ekran görüntüsü 2026-06-06 134144" src="https://github.com/user-attachments/assets/91957ab4-504d-411e-990f-c6ab027118db" />
+
+
+---
 
 ##  Core Features & Workflow
 
