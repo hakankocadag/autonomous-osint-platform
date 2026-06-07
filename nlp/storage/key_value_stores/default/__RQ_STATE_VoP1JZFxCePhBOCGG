@@ -1,20 +1,20 @@
 {
-  "sequence_counter": 5,
+  "sequence_counter": 6,
   "forefront_sequence_counter": 0,
   "forefront_requests": {},
   "regular_requests": {
     "https://www.reuters.com/world": 0,
-    "https://apnews.com/world-news": 1,
+    "https://apnews.com/world-news": 5,
     "https://www.bbc.com/news/world": 2,
     "https://www.aljazeera.com/news": 3,
     "https://www.theguardian.com/world": 4
   },
   "in_progress_requests": [],
   "handled_requests": [
-    "https://www.theguardian.com/world",
     "https://www.bbc.com/news/world",
+    "https://www.reuters.com/world",
     "https://apnews.com/world-news",
     "https://www.aljazeera.com/news",
-    "https://www.reuters.com/world"
+    "https://www.theguardian.com/world"
   ]
 }
