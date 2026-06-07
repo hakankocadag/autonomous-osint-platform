@@ -50,3 +50,10 @@ outputs/audio/*.wav
 Thumbs.db
 local-ai/
 *.mp3
+
+# Stop tracking temporary outputs and caches
+nlp/storage/
+temp_tts_report.json
+gemini_summary_output.json
+nlp/intelligence_report.json
+.py
