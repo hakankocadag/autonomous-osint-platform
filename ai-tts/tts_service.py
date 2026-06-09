@@ -90,7 +90,7 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
         summary = report_data.get("summary", "")
         
         # 2. Check if the report is a fallback report
-        if "AI report generation failed" in summary or not summary:
+        if "System Error" in summary or not summary:
             logger.info("Skipping TTS because the intelligence report is a fallback output.")
             return
 

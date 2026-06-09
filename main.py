@@ -535,7 +535,7 @@ class NewsCollectorApp(QMainWindow):
         self.ai_output = ZoomableTextBrowser() 
         self.ai_output.setOpenLinks(False) 
         self.ai_output.anchorClicked.connect(self.handle_link_click) 
-        self.ai_output.setPlaceholderText("Loading Qwen model in background...")
+        self.ai_output.setPlaceholderText("Initializing autonomous OSINT engines...")
         output_layout.addWidget(self.ai_output)
 
         # Floating Input Panel (Bottom Right)

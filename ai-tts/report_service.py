@@ -150,7 +150,7 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
         "topics": [],
         "confidence_level": "Low",
         "key_judgments": [],
-        "summary": "AI report generation failed. The provider returned a malformed or non-JSON response."
+        "summary": "System Error: The intelligence feed could not be synthesized due to a provider failure."
     }
     
     if not raw_response:
@@ -297,9 +297,9 @@ def generate_summary_report(cleaned_data: Any, provider: str, api_key: str, mode
             "category": "Unknown",
             "locations": [],
             "keywords": [],
-            "confidence_level": "Low",
+            "confidence_level": "None",
             "key_judgments": [],
-            "summary": f"AI report generation failed. Error: {error_msg}"
+            "summary": f"System Error: Intelligence synthesis failed. Details: {error_msg}"
         }
     else:
         structured_data = parse_and_validate_json(raw_response)
