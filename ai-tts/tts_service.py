@@ -79,7 +79,6 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
     Does not crash the pipeline if TTS fails.
     """
     try:
-        # 1. Read the final JSON report
         if not os.path.exists(report_json_path):
             logger.error(f"TTS Error: Report file {report_json_path} not found.")
             return
@@ -89,12 +88,10 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
 
         summary = report_data.get("summary", "")
         
-        # 2. Check if the report is a fallback report
         if "System Error" in summary or not summary:
             logger.info("Skipping TTS because the intelligence report is a fallback output.")
             return
 
-        # 3. Construct a natural spoken script
         script = build_spoken_briefing(report_data)
 
         logger.info("Generated TTS Script:")
@@ -102,7 +99,6 @@ def generate_audio_briefing(report_json_path: str, output_file: str = None) -> N
         print(script)
         print("---------------------------\n")
 
-        # 4. Call TTS Provider
         provider = os.environ.get("TTS_PROVIDER", "gtts").strip().lower()
         if output_file is None:
             output_file = os.environ.get("TTS_OUTPUT_FILE", "briefing.mp3").strip()

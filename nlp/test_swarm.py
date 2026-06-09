@@ -275,7 +275,7 @@ async def main() -> None:
     nlp_inbox: asyncio.Queue[TacticalPayload] = asyncio.Queue(maxsize=50)
     nlp_outbox: asyncio.Queue[ProcessedPayload] = asyncio.Queue()
     
-    # 1. Fire up the backend NLP loop (daemonized equivalent)
+    logging.info("Starting up the backend NLP loop...")
     consumer_task = asyncio.create_task(nlp_consumer.start(nlp_inbox, nlp_outbox))
 
     parser = argparse.ArgumentParser()
@@ -408,13 +408,13 @@ async def main() -> None:
     selected_links = unique_discovered
     logger.info(f"🔍 Discovered {len(selected_links)} unique target articles matching '{keyword}' under {hours} hours old.")
 
-    # 2. Route links to correct Producer Strategy
+    logging.info("Routing links to correct Producer Strategy...")
     router = StrategyRouter()
     strategy_mapping = router.dispatch(selected_links)
     
     logger.info("🚀 Phase 2 Concurrent Strategy Crawl")
     
-    # 3. Execute all Producers concurrently
+    logging.info("Executing all Producers concurrently...")
     # Gather creates non blocking task streams for Playwright and BeautifulSoup models
     producer_tasks = []
     for strategy, chunk_links in strategy_mapping.items():
@@ -425,7 +425,7 @@ async def main() -> None:
             
     await asyncio.gather(*producer_tasks)
 
-    # 4. Await queue drain and map results
+    logging.info("Awaiting queue drain and mapping results...")
     logger.info("⏳ Waiting for NLP queue to digest all chunks...")
     await nlp_inbox.join()
     
