@@ -211,9 +211,25 @@ def run_curl_headers(url: str) -> dict:
 
 
 def run_ipinfo(ip_or_domain: str) -> dict:
-    raw = run_cmd(["curl", "-s", f"https://ipinfo.io/{ip_or_domain}/json"], timeout=15)
+    import socket
+    try:
+        ip = socket.gethostbyname(ip_or_domain)
+    except Exception as e:
+        ip = ip_or_domain
+        
+    raw = run_cmd(["curl", "-s", f"https://ipinfo.io/{ip}/json"], timeout=15)
     try:
         data = json.loads(raw)
+        if "error" in data:
+            err_msg = data["error"].get("message", "Unknown error")
+            _kv("error", err_msg, val_color=RD)
+            return {"error": err_msg, "raw": raw}
+            
+        if "bogon" in data and data["bogon"]:
+            _kv("ip", ip)
+            _kv("error", "Bogon IP (Local/Private)", val_color=Y)
+            return {"bogon": True, "ip": ip, "raw": raw}
+            
         fields = ["ip", "hostname", "city", "region", "country", "org", "timezone"]
         result = {k: data[k] for k in fields if k in data}
         for k, v in result.items():
@@ -377,20 +393,20 @@ def run_shodan(ip: str) -> dict:
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 TOOL_DISPATCH: dict = {
-    "whois":        lambda p: run_whois(p["domain"] or p["ip"]),
-    "dig":          lambda p: run_dig(p["domain"]),
-    "whatweb":      lambda p: run_whatweb(p["url"] or f"http://{p['domain']}"),
-    "nmap":         lambda p: run_nmap(p["ip"] or p["domain"]),
-    "traceroute":   lambda p: run_traceroute(p["ip"] or p["domain"]),
-    "curl_headers": lambda p: run_curl_headers(p["url"] or f"http://{p['domain']}"),
-    "ipinfo":       lambda p: run_ipinfo(p["ip"] or p["domain"]),
-    "abuseipdb":    lambda p: run_abuseipdb(p["ip"]),
+    "whois":        lambda p: run_whois(p.get("domain") or p.get("ip")),
+    "dig":          lambda p: run_dig(p.get("domain")),
+    "whatweb":      lambda p: run_whatweb(p.get("url") or f"http://{p.get('domain')}"),
+    "nmap":         lambda p: run_nmap(p.get("ip") or p.get("domain")),
+    "traceroute":   lambda p: run_traceroute(p.get("ip") or p.get("domain")),
+    "curl_headers": lambda p: run_curl_headers(p.get("url") or f"http://{p.get('domain')}"),
+    "ipinfo":       lambda p: run_ipinfo(p.get("ip") or p.get("domain")),
+    "abuseipdb":    lambda p: run_abuseipdb(p.get("ip")),
     "virustotal":   lambda p: run_virustotal(
-                        p["hash"] or p["url"] or p["domain"] or p["ip"],
-                        p["target_type"]
+                        p.get("hash") or p.get("url") or p.get("domain") or p.get("ip"),
+                        p.get("target_type")
                     ),
-    "urlscan":      lambda p: run_urlscan(p["url"] or p["domain"]),
-    "shodan":       lambda p: run_shodan(p["ip"]),
+    "urlscan":      lambda p: run_urlscan(p.get("url") or p.get("domain")),
+    "shodan":       lambda p: run_shodan(p.get("ip")),
 }
 
 

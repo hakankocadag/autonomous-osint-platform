@@ -4,7 +4,7 @@ import socket
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
                              QHBoxLayout, QVBoxLayout, QPushButton, QTextEdit, QTextBrowser, 
                              QMessageBox, QDialog, QLabel, QLineEdit, QRadioButton, QButtonGroup,
-                             QGraphicsDropShadowEffect)
+                             QGraphicsDropShadowEffect, QCheckBox, QScrollArea)
 from PyQt6.QtGui import QAction, QTextCursor, QTextBlockFormat, QTextCharFormat, QColor, QFont, QPalette, QActionGroup, QIcon
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
@@ -19,6 +19,86 @@ import re
 from dotenv import load_dotenv
 
 load_dotenv()
+
+class NewsSourceDialog(QDialog):
+    def __init__(self, parent=None, current_choice="all"):
+        super().__init__(parent)
+        self.setWindowTitle("Select Sources")
+        self.setMinimumSize(400, 500)
+        self.current_choice = current_choice
+        self.selected_choice = current_choice
+        
+        layout = QVBoxLayout(self)
+        
+        info_label = QLabel("Select the news agencies you want to scan:")
+        layout.addWidget(info_label)
+        
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout(scroll_content)
+        
+        self.checkboxes = []
+        
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            nlp_dir = os.path.join(base_dir, "nlp")
+            sys.path.insert(0, nlp_dir)
+            from test_swarm import SOURCES
+            sys.path.pop(0)
+            
+            selected_indices = []
+            if self.current_choice != "all":
+                selected_indices = [int(x.strip()) - 1 for x in self.current_choice.split(",") if x.strip().isdigit()]
+                
+            for i, source in enumerate(SOURCES):
+                cb = QCheckBox(f"{source['name']} ({source['category']})")
+                if self.current_choice == "all" or i in selected_indices:
+                    cb.setChecked(True)
+                self.checkboxes.append((i, cb))
+                self.scroll_layout.addWidget(cb)
+        except Exception as e:
+            err_label = QLabel(f"Error loading sources: {e}")
+            self.scroll_layout.addWidget(err_label)
+            
+        self.scroll_layout.addStretch()
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+        
+        btn_layout = QHBoxLayout()
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(self.select_all)
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.clicked.connect(self.deselect_all)
+        btn_layout.addWidget(select_all_btn)
+        btn_layout.addWidget(deselect_all_btn)
+        layout.addLayout(btn_layout)
+        
+        btn_box = QHBoxLayout()
+        save_btn = QPushButton("Save Selection")
+        save_btn.clicked.connect(self.save_selection)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_box.addStretch()
+        btn_box.addWidget(save_btn)
+        btn_box.addWidget(cancel_btn)
+        layout.addLayout(btn_box)
+        
+    def select_all(self):
+        for _, cb in self.checkboxes:
+            cb.setChecked(True)
+            
+    def deselect_all(self):
+        for _, cb in self.checkboxes:
+            cb.setChecked(False)
+            
+    def save_selection(self):
+        selected = [str(i + 1) for i, cb in self.checkboxes if cb.isChecked()]
+        if len(selected) == len(self.checkboxes) or not selected:
+            self.selected_choice = "all"
+        else:
+            self.selected_choice = ",".join(selected)
+        self.accept()
 
 class ReconWorker(QThread):
     finished = pyqtSignal(str, object)
@@ -61,16 +141,17 @@ class NewsWorker(QThread):
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
 
-    def __init__(self, nlp_dir, keyword, hours):
+    def __init__(self, nlp_dir, keyword, hours, choice="all"):
         super().__init__()
         self.nlp_dir = nlp_dir
         self.keyword = keyword
         self.hours = hours
+        self.choice = choice
 
     def run(self):
         try:
             process = subprocess.Popen(
-                [sys.executable, "-u", "test_swarm.py", "--keyword", str(self.keyword), "--hours", str(self.hours), "--choice", "all"],
+                [sys.executable, "-u", "test_swarm.py", "--keyword", str(self.keyword), "--hours", str(self.hours), "--choice", str(self.choice)],
                 cwd=self.nlp_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding='utf-8', errors='replace'
             )
             
@@ -131,11 +212,12 @@ class SummaryWorker(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
 
-    def __init__(self, data, provider, api_key):
+    def __init__(self, data, provider, api_key, keyword=None):
         super().__init__()
         self.data = data
         self.provider = provider
         self.api_key = api_key
+        self.keyword = keyword
 
     def run(self):
         try:
@@ -148,7 +230,7 @@ class SummaryWorker(QThread):
                 
             from report_service import generate_summary_report
 
-            summary_data = generate_summary_report(self.data, self.provider, self.api_key)
+            summary_data = generate_summary_report(self.data, self.provider, self.api_key, keyword=self.keyword)
             self.finished.emit(summary_data)
         except Exception as e:
             self.error.emit(str(e))
@@ -370,6 +452,12 @@ class NewsCollectorApp(QMainWindow):
         set_api_key_action = QAction("Set API Key", self)
         set_api_key_action.triggered.connect(self.open_token_dialog)
         configuration_menu.addAction(set_api_key_action)
+        
+        news_sources_action = QAction("Select Sources", self)
+        news_sources_action.triggered.connect(self.open_news_source_dialog)
+        configuration_menu.addAction(news_sources_action)
+        
+        self.news_choice = "all"
 
         theme_menu = menubar.addMenu("Theme")
         
@@ -933,7 +1021,7 @@ class NewsCollectorApp(QMainWindow):
 
     def on_token_ready(self, token):
         cursor = self.ai_output.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.ai_output.setTextCursor(cursor)
         self.ai_output.insertPlainText(token)
         
@@ -1042,6 +1130,10 @@ class NewsCollectorApp(QMainWindow):
         js_code = f"addMarker({lat}, {lng}, '{text}');"
         self.map_view.page().runJavaScript(js_code)
 
+    def open_news_source_dialog(self):
+        dialog = NewsSourceDialog(self, getattr(self, 'news_choice', 'all'))
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.news_choice = dialog.selected_choice
 
     def on_news_ready(self, response):
         clean = response.strip()
@@ -1071,7 +1163,7 @@ class NewsCollectorApp(QMainWindow):
             base_dir = os.path.dirname(os.path.abspath(__file__))
             nlp_dir = os.path.join(base_dir, "nlp")
             
-            self.news_worker = NewsWorker(nlp_dir, keyword, hours)
+            self.news_worker = NewsWorker(nlp_dir, keyword, hours, getattr(self, 'news_choice', 'all'))
             self.news_worker.progress.connect(self.on_news_progress)
             self.news_worker.finished.connect(self.on_news_finished)
             self.news_worker.error.connect(self.on_news_error)
@@ -1105,6 +1197,7 @@ class NewsCollectorApp(QMainWindow):
         self.ai_output.insertHtml(html)
         if report_data:
             
+            
             import os, json
             token_path = "ai_settings.json"
             api_key = ""
@@ -1124,7 +1217,8 @@ class NewsCollectorApp(QMainWindow):
                 scrollbar.setValue(scrollbar.maximum())
                 return
                 
-            self.summary_worker = SummaryWorker(report_data, provider, api_key)
+            kw = getattr(self.news_worker, 'keyword', None) if hasattr(self, 'news_worker') else None
+            self.summary_worker = SummaryWorker(report_data, provider, api_key, keyword=kw)
             self.summary_worker.finished.connect(self.on_summary_finished)
             self.summary_worker.error.connect(self.on_summary_error)
             self.summary_worker.start()
@@ -1160,6 +1254,7 @@ class NewsCollectorApp(QMainWindow):
         
         import re
         html_summary = re.sub(r'#+\s*(.*)', rf'<h3 style="color:{c["header"]}; margin-bottom: 5px; margin-top: 15px; font-weight: 600;">\1</h3><hr>', summary_text)
+        html_summary = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_summary)
         html_summary = re.sub(r'<hr>\s+', '<hr>', html_summary)
         html_summary = html_summary.replace('\n', '<br>')
         

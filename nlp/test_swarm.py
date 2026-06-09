@@ -25,7 +25,7 @@ if sys.platform == "win32":
     except AttributeError:
         pass
 
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from pydantic import BaseModel, HttpUrl, field_validator
 from crawlee.crawlers import (
@@ -42,9 +42,6 @@ from nlp import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-
-
-
 SOURCES: list[dict] = [
 
     {"name": "Reuters World",           "url": "https://www.reuters.com/world/",                             "category": "Wire"},
@@ -52,13 +49,22 @@ SOURCES: list[dict] = [
     {"name": "BBC World",               "url": "https://www.bbc.com/news/world",                             "category": "Mainstream"},
     {"name": "Al Jazeera",              "url": "https://www.aljazeera.com/news/",                            "category": "Mainstream"},
     {"name": "The Guardian",            "url": "https://www.theguardian.com/world",                          "category": "Mainstream"},
+    
+    # New high-volume mainstream sources
+    {"name": "CNN World",               "url": "https://edition.cnn.com/world",                              "category": "Mainstream"},
+    {"name": "Fox News World",          "url": "https://www.foxnews.com/world",                              "category": "Mainstream"},
+    {"name": "NBC News World",          "url": "https://www.nbcnews.com/world",                              "category": "Mainstream"},
+    {"name": "NPR World",               "url": "https://www.npr.org/sections/world/",                        "category": "Mainstream"},
+    {"name": "Washington Post",         "url": "https://www.washingtonpost.com/world/",                      "category": "Mainstream"},
+    {"name": "New York Times",          "url": "https://www.nytimes.com/section/world",                      "category": "Mainstream"},
+    
+    # International & European high-volume sources
+    {"name": "France 24",               "url": "https://www.france24.com/en/world/",                         "category": "Mainstream"},
+    {"name": "DW News",                 "url": "https://www.dw.com/en/top-stories/s-9097",                   "category": "Mainstream"},
+    {"name": "The Independent",         "url": "https://www.independent.co.uk/news/world",                   "category": "Mainstream"},
 ]
 
-CATEGORIES: list[str] = sorted({s["category"] for s in SOURCES})
-
-
-
-
+# [VERİ YAPISI]: İnternette bulduğumuz makale linklerini ve temel verilerini (başlık, kategori) tutan şema.
 class DiscoveredLink(BaseModel):
     """A candidate URL found on an index/listing page."""
     source_name: str
@@ -79,14 +85,12 @@ class DiscoveredLink(BaseModel):
         ref = self.pub_time or self.discovered_at
         return (datetime.now(timezone.utc) - ref).total_seconds() / 3600
 
-
-
-
+# [YARDIMCI FONKSİYON]: Metinlerin içindeki gereksiz boşlukları ve sekmeleri (tab) temizler.
 def clean_text(text: str) -> str:
     """Remove excessive whitespace from a short string."""
     return re.sub(r"\s+", " ", text).strip()
 
-
+# [YARDIMCI FONKSİYON]: Sitede yazan "5 hours ago" (5 saat önce) gibi metinleri gerçek zaman objelerine çevirir.
 def parse_relative_time(text: str) -> Optional[datetime]:
     """Parse relative timestamps locally."""
     now = datetime.now(timezone.utc)
@@ -103,9 +107,7 @@ def parse_relative_time(text: str) -> Optional[datetime]:
             return now - timedelta(**{unit: int(m.group(1))})
     return None
 
-
-
-
+# [STRATEJİ ARAYÜZÜ]: Kazıma işlemlerinin (Playwright veya BS4) uyması gereken standart şablon.
 class ExtractionStrategy(ABC):
     """Strategy Interface for executing an extraction routine on a set of links."""
     
@@ -119,7 +121,7 @@ class ExtractionStrategy(ABC):
         """
         pass
 
-
+# [PLAYWRIGHT KAZIYICI]: Javascript kullanan, dinamik ve karmaşık siteler (Aggregator) için gerçek tarayıcı kullanır.
 class PlaywrightExtractionStrategy(ExtractionStrategy):
     """A heavy, full-browser strategy for dynamic SPAs and Javascript sources."""
 
@@ -183,7 +185,7 @@ class PlaywrightExtractionStrategy(ExtractionStrategy):
 
         await crawler.run([str(l.url) for l in links])
 
-
+# [BEAUTIFULSOUP KAZIYICI]: Basit ve statik siteler için arkada sessizce çalışan, çok hızlı ve hafif kazıyıcı.
 class BeautifulSoupExtractionStrategy(ExtractionStrategy):
     """A lightweight, high-speed strategy for static sites using BS4 & aiohttp."""
 
@@ -233,7 +235,7 @@ class BeautifulSoupExtractionStrategy(ExtractionStrategy):
 
         await crawler.run([str(l.url) for l in links])
 
-
+# [YÖNLENDİRİCİ]: Gelen linkin zorluğuna bakarak Playwright'a mı yoksa BeautifulSoup'a mı gideceğine karar verir.
 class StrategyRouter:
     """Routes specific URLs to their most efficient ExtractionStrategy."""
     
@@ -258,9 +260,7 @@ class StrategyRouter:
                 
         return routing
 
-
-
-
+# [ANA MOTOR]: Tüm sistemi başlatan, NLP temizleyiciyi çalıştıran ve eşzamanlı (async) kuyrukları yöneten ana döngü.
 async def main() -> None:
     # Initialize the Autonomous Consumer Process
     processors = [

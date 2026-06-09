@@ -25,7 +25,18 @@ CRITICAL INSTRUCTIONS FOR THE JSON OUTPUT:
   "topics": [],
   "confidence_level": "",
   "key_judgments": [],
-  "summary": ""
+  "topics_analysis": [
+    {
+      "topic_name": "",
+      "paragraphs": [""]
+    }
+  ],
+  "references": [
+    {
+      "source": "",
+      "claim": ""
+    }
+  ]
 }
 
 FIELD RULES:
@@ -38,11 +49,18 @@ FIELD RULES:
 - "key_judgments": 2-4 short analytical bullet-style judgments grounded in the input. Do not make dramatic unsupported claims.
 
 SUMMARY RULES:
-1. Provide a summary for each topic, structured with headers for each topic (Markdown headers like ### are allowed). Do not provide a single whole summarization.
-2. For each topic, keep it exactly one paragraph, around 60-90 words.
+1. Provide a structural analysis inside "topics_analysis". Create an object for each topic.
+2. For each topic, write 2-3 detailed paragraphs analyzing the topic and store them as separate string elements in the "paragraphs" array. Do NOT output raw Markdown text blocks outside the JSON.
 3. Synthesize the whole dataset; do not summarize each record separately.
-4. Avoid robotic/academic phrases such as: "ignite global debate", "regulatory frameworks", "profound economic impacts", "critical juncture", "mandates close observation", "ramifications", "global landscape", "broader implications".
+4. CITATIONS SECTION REQUIRED: Inside the "references" array, provide a structured list of all specific evidence, mapped directly to the reporting news agency (e.g. {"source": "BBC", "claim": "..."}).
+5. Avoid robotic/academic phrases such as: "ignite global debate", "regulatory frameworks", "profound economic impacts", "critical juncture", "mandates close observation", "ramifications", "global landscape", "broader implications".
 """
+
+def get_system_prompt(keyword: Optional[str] = None) -> str:
+    prompt = SYSTEM_PROMPT
+    if keyword and keyword.strip().lower() not in ["news", "all", "latest"]:
+        prompt += f"\n\nCRITICAL DIRECTIVE: The user explicitly searched for the keyword/topic: '{keyword}'. You MUST aggressively filter out unrelated side-news from the provided text and strictly focus your intelligence brief, key judgments, and summaries ONLY on events, actions, and insights related to '{keyword}'. If a provided article does not contain information about '{keyword}', you must ignore it entirely."
+    return prompt
 
 import time
 
@@ -74,11 +92,12 @@ def _make_http_request_with_retry(url: str, headers: dict, payload: dict) -> dic
     logger.error("All attempts failed.")
     raise Exception(f"All attempts failed. Last error: {last_error}")
 
-def _call_gemini(prompt: str, api_key: str, model_name: str = "gemini-flash-latest") -> str:
+def _call_gemini(prompt: str, api_key: str, model_name: str = "gemini-flash-latest", keyword: Optional[str] = None) -> str:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
+    sys_prompt = get_system_prompt(keyword)
     payload = {
-        "contents": [{"role": "user", "parts": [{"text": SYSTEM_PROMPT + "\n\nData:\n" + prompt}]}],
+        "contents": [{"role": "user", "parts": [{"text": sys_prompt + "\n\nData:\n" + prompt}]}],
         "generationConfig": {"responseMimeType": "application/json"}
     }
     data = _make_http_request_with_retry(url, headers, payload)
@@ -87,14 +106,15 @@ def _call_gemini(prompt: str, api_key: str, model_name: str = "gemini-flash-late
     except (KeyError, IndexError) as e:
         raise Exception(f"Failed to parse Gemini response: {e}. Raw data: {data}")
 
-def _call_openai(prompt: str, api_key: str, model_name: str = "gpt-4o-mini") -> str:
+def _call_openai(prompt: str, api_key: str, model_name: str = "gpt-4o-mini", keyword: Optional[str] = None) -> str:
     url = "https://api.openai.com/v1/chat/completions"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    sys_prompt = get_system_prompt(keyword)
     payload = {
         "model": model_name,
         "response_format": {"type": "json_object"},
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": sys_prompt},
             {"role": "user", "content": "Here is the scraped data:\n" + prompt}
         ]
     }
@@ -104,13 +124,14 @@ def _call_openai(prompt: str, api_key: str, model_name: str = "gpt-4o-mini") -> 
     except (KeyError, IndexError) as e:
         raise Exception(f"Failed to parse OpenAI response: {e}. Raw data: {data}")
 
-def _call_anthropic(prompt: str, api_key: str, model_name: str = "claude-3-5-sonnet-20240620") -> str:
+def _call_anthropic(prompt: str, api_key: str, model_name: str = "claude-3-5-sonnet-20240620", keyword: Optional[str] = None) -> str:
     url = "https://api.anthropic.com/v1/messages"
     headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    sys_prompt = get_system_prompt(keyword)
     payload = {
         "model": model_name,
         "max_tokens": 2048,
-        "system": SYSTEM_PROMPT,
+        "system": sys_prompt,
         "messages": [{"role": "user", "content": "Here is the scraped data:\n" + prompt + "\n\nPlease respond with strictly the JSON object as requested."}]
     }
     data = _make_http_request_with_retry(url, headers, payload)
@@ -138,13 +159,38 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
     json_match = re.search(r'```(?:json)?(.*?)```', raw_response, re.DOTALL)
     if json_match:
         raw_response = json_match.group(1).strip()
+    else:
+        start = raw_response.find('{')
+        end = raw_response.rfind('}')
+        if start != -1 and end != -1:
+            raw_response = raw_response[start:end+1]
         
     try:
-        parsed = json.loads(raw_response)
+        parsed = json.loads(raw_response, strict=False)
         if not isinstance(parsed, dict):
             logger.error("Response is not a JSON object")
             return default_response
             
+        topics_analysis = parsed.get("topics_analysis", [])
+        references = parsed.get("references", [])
+        
+        summary_html = ""
+        if isinstance(topics_analysis, list):
+            for t in topics_analysis:
+                if isinstance(t, dict):
+                    topic_name = t.get('topic_name', 'Topic')
+                    summary_html += f"### {topic_name}\n\n"
+                    paras = t.get("paragraphs", [])
+                    if isinstance(paras, list):
+                        for p in paras:
+                            summary_html += f"{p}\n\n"
+        
+        if references and isinstance(references, list):
+            summary_html += "### References\n\n"
+            for r in references:
+                if isinstance(r, dict):
+                    summary_html += f"&bull; **[{r.get('source', 'Source')}]**: {r.get('claim', '')}\n"
+
         validated = {
             "sources": parsed.get("sources", []),
             "category": parsed.get("category", "Mixed") or "Mixed",
@@ -153,7 +199,7 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
             "topics": parsed.get("topics", []),
             "confidence_level": parsed.get("confidence_level", "Low") or "Low",
             "key_judgments": parsed.get("key_judgments", []),
-            "summary": parsed.get("summary", "")
+            "summary": summary_html
         }
         
         if not isinstance(validated["sources"], list):
@@ -183,9 +229,9 @@ def parse_and_validate_json(raw_response: str) -> Dict[str, Any]:
         logger.error(f"Failed to decode JSON from AI response: {e}\nRaw output: {raw_response[:200]}...")
         return default_response
 
-def generate_summary_report(cleaned_data: Any, provider: str, api_key: str, model_name: Optional[str] = None) -> Dict[str, Any]:
+def generate_summary_report(cleaned_data: Any, provider: str, api_key: str, model_name: Optional[str] = None, keyword: Optional[str] = None) -> Dict[str, Any]:
     """Main entrypoint to generate the intelligence report."""
-    logger.info(f"Generating summary report using provider: {provider}")
+    logger.info(f"Generating summary report using provider: {provider} for keyword: {keyword}")
     
     data_str = json.dumps(cleaned_data, ensure_ascii=False)
     
@@ -193,11 +239,11 @@ def generate_summary_report(cleaned_data: Any, provider: str, api_key: str, mode
         p_key = prov.lower().strip()
         try:
             if p_key == "gemini":
-                return _call_gemini(data_str, key, mod or "gemini-flash-latest"), p_key, None
+                return _call_gemini(data_str, key, mod or "gemini-flash-latest", keyword), p_key, None
             elif p_key == "openai":
-                return _call_openai(data_str, key, mod or "gpt-4o-mini"), p_key, None
+                return _call_openai(data_str, key, mod or "gpt-4o-mini", keyword), p_key, None
             elif p_key in ["anthropic", "claude"]:
-                return _call_anthropic(data_str, key, mod or "claude-3-5-sonnet-20240620"), "claude", None
+                return _call_anthropic(data_str, key, mod or "claude-3-5-sonnet-20240620", keyword), "claude", None
             else:
                 return None, p_key, f"Unknown provider: {prov}"
         except Exception as e:
@@ -316,4 +362,5 @@ if __name__ == "__main__":
                 print(f"[Testing] Report generation directly with {len(data)} records using {provider.capitalize()}...")
                 generate_summary_report(data, provider, api_key)
         except FileNotFoundError:
+            print("[Error] intelligence_report.json not found. Please run the scraper first to generate it.")
             print("[Error] intelligence_report.json not found. Please run the scraper first to generate it.")

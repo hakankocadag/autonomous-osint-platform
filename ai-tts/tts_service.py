@@ -17,11 +17,23 @@ def build_spoken_briefing(report: dict) -> str:
     confidence_level = report.get("confidence_level", "Unknown")
     
     key_judgments = report.get("key_judgments", [])
-    summary = report.get("summary", "")
     
-    # Strip "Sir," or "Sir, " from the beginning of the summary
-    if summary.lower().startswith("sir,"):
-        summary = summary[4:].strip()
+    # Build summary text purely from topics_analysis to avoid reading raw HTML or references
+    topics_analysis = report.get("topics_analysis", [])
+    summary_text = ""
+    if isinstance(topics_analysis, list):
+        for t in topics_analysis:
+            if isinstance(t, dict):
+                paras = t.get("paragraphs", [])
+                if isinstance(paras, list):
+                    for p in paras:
+                        summary_text += f"{p} "
+    else:
+        # Fallback if topics_analysis is missing
+        summary_text = report.get("summary", "")
+        # Strip "Sir," or "Sir, " from the beginning of the summary
+        if summary_text.lower().startswith("sir,"):
+            summary_text = summary_text[4:].strip()
     
     # Build judgments string using First, Second, Third
     judgments_text = ""
@@ -42,10 +54,9 @@ def build_spoken_briefing(report: dict) -> str:
         judgments_text = "No specific judgments were made."
         
     script = (
-        # f"This report focuses on {category}, with relevance to {location}. Confidence level is {confidence_level}.\n\n"
         f"This report focuses on {category}, with relevance to {location}.\n\n"
         f"Key judgments are as follows. {judgments_text}\n\n"
-        f"{summary}\n\n"
+        f"{summary_text}\n\n"
         f"End of briefing."
     )
     
